@@ -21,7 +21,9 @@
     "test:e2e:smoke": "pnpm build:e2e && playwright test --project=smoke",
     "test:e2e:integration": "pnpm build:e2e && playwright test --project=integration",
     "test:e2e:report": "playwright show-report",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:build:namleh-staging": "node scripts/run-namleh-tauri.mjs staging",
+    "tauri:build:namleh-production": "node scripts/run-namleh-tauri.mjs production"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

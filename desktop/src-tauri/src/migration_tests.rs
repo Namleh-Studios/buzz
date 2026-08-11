@@ -4,11 +4,11 @@ use super::*;
 #[test]
 fn canonical_dev_data_dir_replaces_last_component() {
     let current =
-        PathBuf::from("/Users/me/Library/Application Support/xyz.block.buzz.app.dev.my-branch");
+        PathBuf::from("/Users/me/Library/Application Support/com.namlehstudios.buzz.dev.my-branch");
     let canonical = canonical_dev_data_dir(&current).unwrap();
     assert_eq!(
         canonical,
-        PathBuf::from("/Users/me/Library/Application Support/xyz.block.buzz.app.dev")
+        PathBuf::from("/Users/me/Library/Application Support/com.namlehstudios.buzz.dev")
     );
 }
 
@@ -446,7 +446,7 @@ fn canonical_dev_data_dir_returns_self_for_canonical_instance() {
     // The env-var guards (BUZZ_SHARE_IDENTITY, BUZZ_PRIVATE_KEY)
     // require a live Tauri AppHandle and are covered by integration
     // testing only.
-    let current = PathBuf::from("/Users/me/Library/Application Support/xyz.block.buzz.app.dev");
+    let current = PathBuf::from("/Users/me/Library/Application Support/com.namlehstudios.buzz.dev");
     assert_eq!(canonical_dev_data_dir(&current).unwrap(), current);
 
     // Also verify with a temp dir on the real filesystem.

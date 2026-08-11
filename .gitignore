@@ -70,5 +70,8 @@ identity.key
 # mesh-llm build cache
 .cache/
 
+# Generated environment-specific updater configs (contain public feed metadata)
+desktop/src-tauri/tauri.namleh.*.release.conf.json
+
 # Helm dependency tarballs — regenerable from Chart.lock via `helm dependency build`
 deploy/charts/*/charts/*.tgz

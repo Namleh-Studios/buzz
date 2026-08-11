@@ -94,6 +94,7 @@ jobs:
         run: |
           scripts/test-namleh-fork-contract.sh
           scripts/test-github-origin-repo.sh
+          node scripts/test-namleh-macos-identity.mjs
           deploy/charts/buzz-push-gateway/tests/release-contract.sh
           ruby scripts/test-namleh-publish-guards.rb
 

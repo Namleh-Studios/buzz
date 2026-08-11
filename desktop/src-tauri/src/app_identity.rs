@@ -1,0 +1,152 @@
+use tauri::{AppHandle, Runtime};
+
+#[cfg(any(feature = "mesh-llm", test))]
+use std::path::PathBuf;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum AppEnvironment {
+    Development,
+    Staging,
+    Production,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct AppIdentity {
+    pub environment: AppEnvironment,
+    pub product_name: &'static str,
+    pub bundle_identifier: &'static str,
+    pub deep_link_scheme: &'static str,
+    pub keyring_service: &'static str,
+    pub keychain_access_group: &'static str,
+    pub nest_directory: &'static str,
+    pub managed_runtime_directory: &'static str,
+    pub cli_link_name: &'static str,
+}
+
+const DEVELOPMENT: AppIdentity = AppIdentity {
+    environment: AppEnvironment::Development,
+    product_name: "Namleh Buzz Dev",
+    bundle_identifier: "com.namlehstudios.buzz.dev",
+    deep_link_scheme: "namleh-buzz-dev",
+    keyring_service: "com.namlehstudios.buzz.dev.credentials",
+    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz.dev",
+    nest_directory: ".namleh-buzz-dev",
+    managed_runtime_directory: "Namleh Buzz Dev",
+    cli_link_name: "namleh-buzz-dev",
+};
+
+const STAGING: AppIdentity = AppIdentity {
+    environment: AppEnvironment::Staging,
+    product_name: "Namleh Buzz Staging",
+    bundle_identifier: "com.namlehstudios.buzz.staging",
+    deep_link_scheme: "namleh-buzz-staging",
+    keyring_service: "com.namlehstudios.buzz.staging.credentials",
+    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz.staging",
+    nest_directory: ".namleh-buzz-staging",
+    managed_runtime_directory: "Namleh Buzz Staging",
+    cli_link_name: "namleh-buzz-staging",
+};
+
+const PRODUCTION: AppIdentity = AppIdentity {
+    environment: AppEnvironment::Production,
+    product_name: "Namleh Buzz",
+    bundle_identifier: "com.namlehstudios.buzz",
+    deep_link_scheme: "namleh-buzz",
+    keyring_service: "com.namlehstudios.buzz.credentials",
+    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz",
+    nest_directory: ".namleh-buzz",
+    managed_runtime_directory: "Namleh Buzz",
+    cli_link_name: "namleh-buzz",
+};
+
+pub(crate) fn current() -> &'static AppIdentity {
+    match env!("NAMLEH_DESKTOP_APP_ENV") {
+        "development" => &DEVELOPMENT,
+        "staging" => &STAGING,
+        "production" => &PRODUCTION,
+        _ => panic!("invalid NAMLEH_DESKTOP_APP_ENV"),
+    }
+}
+
+#[cfg(any(feature = "mesh-llm", test))]
+pub(crate) fn mesh_cache_environment() -> [(&'static str, PathBuf); 6] {
+    let root = dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join(current().bundle_identifier)
+        .join("mesh-llm");
+    [
+        ("HF_HOME", root.join("huggingface")),
+        ("HF_HUB_CACHE", root.join("huggingface").join("hub")),
+        (
+            "HUGGINGFACE_HUB_CACHE",
+            root.join("huggingface").join("hub"),
+        ),
+        ("HF_XET_CACHE", root.join("huggingface").join("xet")),
+        ("MESH_LLM_DATA_DIR", root.join("data")),
+        ("MESH_LLM_RUNTIME_ROOT", root.join("runtime")),
+    ]
+}
+
+#[cfg(feature = "mesh-llm")]
+pub(crate) fn configure_process_cache_environment() {
+    for (name, path) in mesh_cache_environment() {
+        std::env::set_var(name, path);
+    }
+}
+
+pub(crate) fn validate_runtime_config<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+    let identity = current();
+    let configured_identifier = app.config().identifier.as_str();
+    let identifier_matches = configured_identifier == identity.bundle_identifier
+        || (identity.environment == AppEnvironment::Development
+            && configured_identifier
+                .strip_prefix(identity.bundle_identifier)
+                .is_some_and(|suffix| suffix.starts_with('.')));
+    if !identifier_matches {
+        return Err(format!(
+            "compiled {} identity does not match configured bundle identifier {}",
+            identity.bundle_identifier,
+            app.config().identifier
+        ));
+    }
+    let configured_name = app.package_info().name.as_str();
+    let name_matches = configured_name == identity.product_name
+        || (identity.environment == AppEnvironment::Development
+            && configured_name.starts_with("Namleh Buzz Dev ("));
+    if !name_matches {
+        return Err(format!(
+            "compiled {} identity does not match configured product name {}",
+            identity.product_name,
+            app.package_info().name
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{current, AppEnvironment};
+
+    #[test]
+    fn default_test_build_uses_namleh_development_identity() {
+        let identity = current();
+        assert_eq!(identity.environment, AppEnvironment::Development);
+        assert_eq!(identity.bundle_identifier, "com.namlehstudios.buzz.dev");
+        assert_eq!(identity.deep_link_scheme, "namleh-buzz-dev");
+        assert!(!identity.keyring_service.contains("buzz-desktop"));
+        assert!(!identity.nest_directory.starts_with(".buzz"));
+    }
+
+    #[test]
+    fn mesh_cache_paths_are_scoped_to_the_current_bundle_identifier() {
+        let identifier = current().bundle_identifier;
+        for (_, path) in super::mesh_cache_environment() {
+            assert!(
+                path.components()
+                    .any(|component| component.as_os_str() == identifier),
+                "{} is not scoped to {identifier}",
+                path.display()
+            );
+        }
+    }
+}

@@ -4,7 +4,12 @@
  * Format: `buzz://message?channel=<uuid>&id=<eventId>[&thread=<rootId>]`
  */
 
-const MESSAGE_LINK_SCHEME = "buzz:";
+import {
+  APP_DEEP_LINK_PROTOCOL,
+  isSupportedBuzzDeepLinkProtocol,
+} from "@/shared/appIdentity";
+
+const MESSAGE_LINK_SCHEME = APP_DEEP_LINK_PROTOCOL;
 const MESSAGE_LINK_HOST = "message";
 
 export type MessageLinkInput = {
@@ -67,7 +72,7 @@ export function parseMessageLink(url: string): MessageLinkParseResult {
     return { ok: false, reason: "invalid-url" };
   }
 
-  if (parsed.protocol !== MESSAGE_LINK_SCHEME) {
+  if (!isSupportedBuzzDeepLinkProtocol(parsed.protocol)) {
     return { ok: false, reason: "wrong-scheme" };
   }
   // `new URL("buzz://message?…")` puts "message" in `hostname`.
@@ -100,7 +105,15 @@ export function parseMessageLink(url: string): MessageLinkParseResult {
  */
 export function isMessageLink(href: string | undefined | null): boolean {
   if (!href) return false;
-  return href.startsWith("buzz://message?") || href === "buzz://message";
+  try {
+    const parsed = new URL(href);
+    return (
+      isSupportedBuzzDeepLinkProtocol(parsed.protocol) &&
+      parsed.hostname === MESSAGE_LINK_HOST
+    );
+  } catch {
+    return false;
+  }
 }
 
 type MessageLinkRenderInput = {

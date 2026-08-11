@@ -1,4 +1,5 @@
 #![recursion_limit = "256"] // Deep Tauri command futures exceed the default layout query depth.
+mod app_identity;
 mod app_menu;
 mod app_state;
 mod archive;
@@ -85,6 +86,9 @@ use tauri_plugin_window_state::StateFlags;
 use tray_menu::show_main_window;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(feature = "mesh-llm")]
+    app_identity::configure_process_cache_environment();
+
     // mesh-llm's async chains (model download, node start/join) overflow
     // tokio's default 2 MiB worker stacks — a stack-guard SIGABRT, not a
     // panic. Upstream mesh-llm and mesh-console both run on 8 MiB worker
@@ -119,8 +123,9 @@ pub fn run() {
                 let _ = w.set_focus();
             }
             // Forward any deep link URLs from the duplicate launch.
+            let deep_link_prefix = format!("{}://", app_identity::current().deep_link_scheme);
             for arg in &argv {
-                if arg.starts_with("buzz://") {
+                if arg.starts_with(&deep_link_prefix) {
                     handle_deep_link_url(app, arg);
                 }
             }
@@ -309,6 +314,8 @@ pub fn run() {
         .manage(terminal_runtime::TerminalSessions::default())
         .setup(move |app| {
             let app_handle = app.handle().clone();
+            app_identity::validate_runtime_config(&app_handle)
+                .map_err(|error| std::io::Error::other(format!("invalid app identity: {error}")))?;
             #[cfg(target_os = "macos")]
             {
                 tray_menu::init(&app_handle)?;
@@ -446,7 +453,7 @@ pub fn run() {
                     .store(port, std::sync::atomic::Ordering::Relaxed);
             });
 
-            // Create the Buzz nest (~/.buzz or ~/.buzz-dev for dev builds) before
+            // Create the active environment's isolated Namleh Buzz nest before
             // agents are restored, so default_agent_workdir() resolves to the
             // nest directory. Non-fatal: agents fall back to $HOME if nest
             // creation fails.
@@ -469,35 +476,12 @@ pub fn run() {
                 None => true,
             };
 
-            // Carry the agent's knowledge from the legacy nest (~/.sprout) into
-            // the live nest after it exists. Must run after ensure_nest() so the
-            // destination is present. Non-fatal.
-            // On a real migration, emit a one-time hint so the user can delete
-            // the now-inert ~/.sprout; the frontend dedupes the toast.
-            // Suppressed when a reset completed this boot: the nest was wiped and
-            // a fresh ~/.sprout-less state is exactly what we want.
-            if !reset_outcome.completed && migration::migrate_legacy_nest() {
-                let _ = app_handle.emit("legacy-nest-migrated", ());
-            }
-
-            // One-time migration for dev builds: copy accumulated knowledge
-            // from the shared ~/.buzz nest into the new dedicated ~/.buzz-dev
-            // nest so no work is lost when the nest is first namespaced.
-            // Runs only when nest_dir() resolved to ~/.buzz-dev (dev instance).
-            // Suppressed after a reset so re-importing ~/.buzz into ~/.buzz-dev
-            // doesn't re-populate what was just wiped.
-            let is_dev_nest = managed_agents::nest_dir()
-                .and_then(|p| p.file_name().map(|n| n.to_os_string()))
-                .is_some_and(|n| n == ".buzz-dev");
-            if !reset_outcome.completed && is_dev_nest {
-                migration::migrate_dev_nest();
-            }
-
+            // Namleh environments never import an upstream Buzz/Sprout nest.
             // Create/update the local CLI symlink pointing to the
             // bundled CLI binary. Non-fatal: agents find CLI via PATH.
             if let Ok(exe) = std::env::current_exe() {
                 if let Some(parent) = exe.parent() {
-                    if let Err(error) = managed_agents::ensure_cli_symlink(parent, is_dev_nest) {
+                    if let Err(error) = managed_agents::ensure_cli_symlink(parent) {
                         eprintln!("buzz-desktop: failed to create CLI symlink: {error}");
                     }
                 }

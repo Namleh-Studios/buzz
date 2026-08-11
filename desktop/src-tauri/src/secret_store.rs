@@ -1,18 +1,10 @@
 //! OS keyring access for desktop nsec private keys.
 //!
-//! All secrets are stored as a single JSON blob under one keychain entry
-//! (service = the store's service name, username = `"secrets"`). This means
-//! exactly one OS prompt per process lifetime regardless of how many keys are
-//! stored — the same pattern used by Goose.
-//!
-//! The chosen backend is selected at compile time by the per-target feature in
-//! `Cargo.toml`. On macOS the legacy `keyring` crate (SecKeychain API) is used
-//! for the blob entry so that signed release builds and unsigned dev builds
-//! share the same store. DPK (Data Protection Keychain) is used only by the
-//! one-time migration path that reads old per-key entries written by #1264.
-//! Windows and Linux use the `keyring` crate directly. The `system-keyring`
-//! feature gates the whole store; when it is off, [`SecretStore`] is unusable
-//! and callers fall back to their own `0o600` file storage.
+//! Secrets are stored as one JSON blob under the environment-specific service
+//! and `"secrets"` account. Signed macOS staging/production builds use their
+//! entitled Data Protection Keychain groups; unsigned development and other
+//! platforms use the `keyring` crate. Without `system-keyring`, callers fall
+//! back to their own `0o600` file storage.
 //!
 //! The store is deliberately NOT on any env-read path. `BUZZ_PRIVATE_KEY`
 //! resolution for harnessed agents and CI is handled upstream (an env
@@ -45,31 +37,14 @@ const BLOB_KEY: &str = "secrets";
 
 // ── Interprocess advisory lock ─────────────────────────────────────────────
 //
-// Two concurrent Buzz processes (e.g. the signed DMG build and an unsigned dev
-// build via `just staging`) share the same OS keychain blob because the
-// service name `"buzz-desktop"` is a constant — it does not key off the bundle
-// identifier. Each process holds its own in-memory cache, so without an
-// interprocess lock a warm-cache write in process A drops keys added by process
-// B between A's last cache-warming read and A's write.
-//
-// The fix: `mutate_blob` acquires an exclusive advisory file lock, then always
-// performs a fresh `read_blob_raw()` inside the lock, applies the mutation,
-// writes back, and releases. The cache is still updated after a successful
-// write, so same-process reads remain fast. The lock is file-based at a fixed
-// per-user path `/tmp/buzz-keychain-<uid>-<service>.lock` on Unix — a path
-// that is invariant to `$TMPDIR`/process environment, so both the GUI-launched
-// signed DMG and a terminal-launched dev build always take the same lock.
+// Each environment has its own service, but concurrent instances of that
+// environment still share a blob. Mutations lock, re-read, write, then update
+// the process cache so a warm cache cannot drop another process's keys.
 
 /// Return the path of the advisory lockfile for `service`.
 ///
-/// The path is `/tmp/buzz-keychain-<uid>-<service>.lock` on Unix — a
-/// deterministic per-user path that is invariant to `$TMPDIR`/process
-/// environment. Both a GUI-launched signed DMG (`launchd`, env-stripped) and a
-/// terminal-launched dev build resolve `/tmp` to the same inode, so they
-/// contend on the same lockfile and achieve mutual exclusion.
-///
-/// On Windows the same name used for the kernel mutex is derived from the
-/// lockfile path, so the service-keyed uniqueness is preserved.
+/// Unix uses `/tmp/buzz-keychain-<uid>-<service>.lock`; Windows derives the
+/// named mutex from the same service-keyed path.
 fn blob_lockfile_path(service: &str) -> PathBuf {
     #[cfg(unix)]
     {
@@ -270,7 +245,8 @@ fn keyring_entry(service: &str, key: &str) -> Result<keyring::Entry, keyring::Er
 use security_framework::base::Error as SFError;
 #[cfg(all(feature = "system-keyring", target_os = "macos"))]
 use security_framework::passwords::{
-    delete_generic_password_options, generic_password, PasswordOptions,
+    delete_generic_password_options, generic_password, set_generic_password_options,
+    PasswordOptions,
 };
 
 /// Returns true when the security-framework error is "item not found" (-25300).
@@ -294,6 +270,7 @@ fn is_dpk_unavailable(e: &SFError) -> bool {
 fn dpk_opts(service: &str, key: &str) -> PasswordOptions {
     let mut opts = PasswordOptions::new_generic_password(service, key);
     opts.use_protected_keychain();
+    opts.set_access_group(crate::app_identity::current().keychain_access_group);
     opts
 }
 
@@ -336,12 +313,22 @@ impl SecretStore {
 
     /// Read the raw blob bytes from the keychain. `Ok(None)` = not found.
     ///
-    /// Always uses the legacy keyring crate on macOS so that signed and
-    /// unsigned (dev) builds share the same store. DPK is only used by
-    /// `migrate_legacy_key` to read old per-key entries written by #1264.
+    /// Signed staging and production builds use their dedicated Data
+    /// Protection Keychain access group. Development uses the legacy keyring
+    /// backend because unsigned Tauri dev builds cannot access an entitled
+    /// group.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn read_blob_raw(&self) -> Result<Option<Vec<u8>>, String> {
-        self.read_blob_raw_keyring()
+        if crate::app_identity::current().environment
+            == crate::app_identity::AppEnvironment::Development
+        {
+            return self.read_blob_raw_keyring();
+        }
+        match generic_password(dpk_opts(&self.service, BLOB_KEY)) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(ref error) if is_not_found(error) => Ok(None),
+            Err(error) => Err(format!("keychain read: {error}")),
+        }
     }
 
     #[cfg(all(feature = "system-keyring", not(target_os = "macos")))]
@@ -451,10 +438,17 @@ impl SecretStore {
         }
     }
 
-    /// Always uses the legacy keyring crate on macOS — see `read_blob_raw`.
+    /// Uses the environment-specific DPK access group for signed staging and
+    /// production builds; development stays on the unsigned-compatible path.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn write_blob_raw(&self, bytes: &[u8]) -> Result<(), String> {
-        self.write_blob_raw_keyring(bytes)
+        if crate::app_identity::current().environment
+            == crate::app_identity::AppEnvironment::Development
+        {
+            return self.write_blob_raw_keyring(bytes);
+        }
+        set_generic_password_options(bytes, dpk_opts(&self.service, BLOB_KEY))
+            .map_err(|error| format!("keychain write: {error}"))
     }
 
     #[cfg(all(feature = "system-keyring", not(target_os = "macos")))]
@@ -582,6 +576,7 @@ impl SecretStore {
     /// Returns the full key→value map when a blob exists, `Ok(None)` when no
     /// blob has been written yet, and `Err` only when the backend is
     /// unavailable. Never calls `migrate_legacy_key`.
+    #[cfg(test)]
     pub fn load_all_readonly(&self) -> Result<Option<HashMap<String, String>>, String> {
         #[cfg(feature = "system-keyring")]
         {
@@ -598,6 +593,7 @@ impl SecretStore {
     /// Entries that already exist in the blob are overwritten; entries not
     /// present in `entries` are left unchanged. If the resulting blob is
     /// identical to what is already stored, no keychain write occurs.
+    #[cfg(test)]
     pub fn store_all(&self, entries: &HashMap<String, String>) -> Result<(), String> {
         #[cfg(feature = "system-keyring")]
         {

@@ -13,7 +13,10 @@
  * must stay compatible (see the golden-format tests on both sides).
  */
 
-const ENTITY_LINK_SCHEME = "buzz:";
+import {
+  APP_DEEP_LINK_SCHEME,
+  isSupportedBuzzDeepLinkProtocol,
+} from "@/shared/appIdentity";
 
 export type ParsedEntityLink =
   | { type: "pr"; id: string; owner: string; dtag: string }
@@ -49,7 +52,7 @@ function checkEventId(id: string): void {
 /** Build a `buzz://repo` link for a repository announcement (kind 30617). */
 export function buildRepoLink(input: { owner: string; dtag: string }): string {
   checkCoordinate(input.owner, input.dtag);
-  return `buzz://repo?owner=${input.owner.toLowerCase()}&d=${input.dtag}`;
+  return `${APP_DEEP_LINK_SCHEME}://repo?owner=${input.owner.toLowerCase()}&d=${input.dtag}`;
 }
 
 /** Build a `buzz://pr` link for a pull request event (kind 1618). */
@@ -60,7 +63,7 @@ export function buildPullRequestLink(input: {
 }): string {
   checkEventId(input.id);
   checkCoordinate(input.owner, input.dtag);
-  return `buzz://pr?id=${input.id.toLowerCase()}&owner=${input.owner.toLowerCase()}&d=${input.dtag}`;
+  return `${APP_DEEP_LINK_SCHEME}://pr?id=${input.id.toLowerCase()}&owner=${input.owner.toLowerCase()}&d=${input.dtag}`;
 }
 
 /** Build a `buzz://issue` link for an issue event (kind 1621). */
@@ -71,7 +74,7 @@ export function buildIssueLink(input: {
 }): string {
   checkEventId(input.id);
   checkCoordinate(input.owner, input.dtag);
-  return `buzz://issue?id=${input.id.toLowerCase()}&owner=${input.owner.toLowerCase()}&d=${input.dtag}`;
+  return `${APP_DEEP_LINK_SCHEME}://issue?id=${input.id.toLowerCase()}&owner=${input.owner.toLowerCase()}&d=${input.dtag}`;
 }
 
 /**
@@ -81,11 +84,15 @@ export function buildIssueLink(input: {
  */
 export function isEntityLink(href: string | undefined | null): boolean {
   if (!href) return false;
-  return (
-    href.startsWith("buzz://pr?") ||
-    href.startsWith("buzz://issue?") ||
-    href.startsWith("buzz://repo?")
-  );
+  try {
+    const parsed = new URL(href);
+    return (
+      isSupportedBuzzDeepLinkProtocol(parsed.protocol) &&
+      ["pr", "issue", "repo"].includes(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -111,7 +118,7 @@ export function parseEntityLink(url: string): EntityLinkParseResult {
     return { ok: false, reason: "invalid-url" };
   }
 
-  if (parsed.protocol !== ENTITY_LINK_SCHEME) {
+  if (!isSupportedBuzzDeepLinkProtocol(parsed.protocol)) {
     return { ok: false, reason: "wrong-scheme" };
   }
 

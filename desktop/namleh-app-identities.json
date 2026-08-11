@@ -1,0 +1,53 @@
+{
+  "development": {
+    "productName": "Namleh Buzz Dev",
+    "bundleIdentifier": "com.namlehstudios.buzz.dev",
+    "deepLinkScheme": "namleh-buzz-dev",
+    "keyringService": "com.namlehstudios.buzz.dev.credentials",
+    "keychainAccessGroup": "962M5A4PL7.com.namlehstudios.buzz.dev",
+    "nestDirectory": ".namleh-buzz-dev",
+    "managedRuntimeDirectory": "Namleh Buzz Dev",
+    "cliLinkName": "namleh-buzz-dev",
+    "updaterChannel": null,
+    "updaterManifestNamespace": null,
+    "updaterAuthorizationAudience": null,
+    "updaterPublicKeyEnv": null,
+    "updaterPrivateKeyEnv": null,
+    "updaterEndpointEnv": null,
+    "signingIdentity": "Apple Development: shelman09@outlook.com (MKPMHJVB9D)"
+  },
+  "staging": {
+    "productName": "Namleh Buzz Staging",
+    "bundleIdentifier": "com.namlehstudios.buzz.staging",
+    "deepLinkScheme": "namleh-buzz-staging",
+    "keyringService": "com.namlehstudios.buzz.staging.credentials",
+    "keychainAccessGroup": "962M5A4PL7.com.namlehstudios.buzz.staging",
+    "nestDirectory": ".namleh-buzz-staging",
+    "managedRuntimeDirectory": "Namleh Buzz Staging",
+    "cliLinkName": "namleh-buzz-staging",
+    "updaterChannel": "namleh-buzz-staging",
+    "updaterManifestNamespace": "staging",
+    "updaterAuthorizationAudience": "namleh-buzz-updates:staging",
+    "updaterPublicKeyEnv": "NAMLEH_STAGING_UPDATER_PUBLIC_KEY",
+    "updaterPrivateKeyEnv": "NAMLEH_STAGING_UPDATER_PRIVATE_KEY",
+    "updaterEndpointEnv": "NAMLEH_STAGING_UPDATER_ENDPOINT",
+    "signingIdentity": "Developer ID Application: STEVEN EDWARD HELMAN (962M5A4PL7)"
+  },
+  "production": {
+    "productName": "Namleh Buzz",
+    "bundleIdentifier": "com.namlehstudios.buzz",
+    "deepLinkScheme": "namleh-buzz",
+    "keyringService": "com.namlehstudios.buzz.credentials",
+    "keychainAccessGroup": "962M5A4PL7.com.namlehstudios.buzz",
+    "nestDirectory": ".namleh-buzz",
+    "managedRuntimeDirectory": "Namleh Buzz",
+    "cliLinkName": "namleh-buzz",
+    "updaterChannel": "namleh-buzz-production",
+    "updaterManifestNamespace": "production",
+    "updaterAuthorizationAudience": "namleh-buzz-updates:production",
+    "updaterPublicKeyEnv": "NAMLEH_PRODUCTION_UPDATER_PUBLIC_KEY",
+    "updaterPrivateKeyEnv": "NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY",
+    "updaterEndpointEnv": "NAMLEH_PRODUCTION_UPDATER_ENDPOINT",
+    "signingIdentity": "Developer ID Application: STEVEN EDWARD HELMAN (962M5A4PL7)"
+  }
+}

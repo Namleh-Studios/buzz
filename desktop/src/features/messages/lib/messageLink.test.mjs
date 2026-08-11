@@ -7,6 +7,7 @@ import {
   parseMessageLink,
   resolveMessageLinkRenderTarget,
 } from "./messageLink.ts";
+import { APP_DEEP_LINK_SCHEME } from "../../../shared/appIdentity.ts";
 
 const CHANNEL = "f570339f-8f8a-4e08-a779-8d954aa44109";
 const MESSAGE =
@@ -16,7 +17,10 @@ const THREAD =
 
 test("buildMessageLink → parseMessageLink round-trips without thread", () => {
   const url = buildMessageLink({ channelId: CHANNEL, messageId: MESSAGE });
-  assert.equal(url, `buzz://message?channel=${CHANNEL}&id=${MESSAGE}`);
+  assert.equal(
+    url,
+    `${APP_DEEP_LINK_SCHEME}://message?channel=${CHANNEL}&id=${MESSAGE}`,
+  );
 
   const parsed = parseMessageLink(url);
   assert.equal(parsed.ok, true);
@@ -53,8 +57,14 @@ test("buildMessageLink treats null/empty thread as absent", () => {
     messageId: MESSAGE,
     threadRootId: "",
   });
-  assert.equal(a, `buzz://message?channel=${CHANNEL}&id=${MESSAGE}`);
-  assert.equal(b, `buzz://message?channel=${CHANNEL}&id=${MESSAGE}`);
+  assert.equal(
+    a,
+    `${APP_DEEP_LINK_SCHEME}://message?channel=${CHANNEL}&id=${MESSAGE}`,
+  );
+  assert.equal(
+    b,
+    `${APP_DEEP_LINK_SCHEME}://message?channel=${CHANNEL}&id=${MESSAGE}`,
+  );
 });
 
 test("buildMessageLink rejects missing required params", () => {
@@ -104,9 +114,11 @@ test("parseMessageLink accepts legacy buzz://message links", () => {
   });
 });
 
-test("isMessageLink matches buzz://message and legacy buzz://message", () => {
+test("isMessageLink matches Namleh and legacy buzz://message links", () => {
   assert.equal(
-    isMessageLink(`buzz://message?channel=${CHANNEL}&id=${MESSAGE}`),
+    isMessageLink(
+      `${APP_DEEP_LINK_SCHEME}://message?channel=${CHANNEL}&id=${MESSAGE}`,
+    ),
     true,
   );
   assert.equal(

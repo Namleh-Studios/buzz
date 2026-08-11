@@ -2,6 +2,7 @@ import * as React from "react";
 import { ImageOff, LoaderCircle, X } from "lucide-react";
 
 import { getRelayHttpUrl, uploadMediaBytes } from "@/shared/api/tauri";
+import { isEntityLink } from "@/shared/lib/entityLink";
 import { extractSupportedLinkPreviews } from "@/shared/lib/linkPreview";
 import {
   buildLinkPreviewSnapshotTag,
@@ -136,7 +137,7 @@ export function useComposerLinkPreviews(content: string) {
   const candidates = React.useMemo(
     () =>
       extractSupportedLinkPreviews(content).filter((preview) =>
-        preview.href.startsWith("buzz://")
+        isEntityLink(preview.href)
           ? true
           : isValidLinkPreviewSnapshotCanonicalUrl(preview.href),
       ),

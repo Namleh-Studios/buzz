@@ -8,6 +8,7 @@ include!("src/managed_agents/reserved_env_keys.rs");
 use base64::Engine as _;
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=NAMLEH_APP_ENV");
     println!("cargo:rerun-if-env-changed=BUZZ_RELAY_URL");
     println!("cargo:rerun-if-env-changed=BUZZ_RELAY_HTTP");
     println!("cargo:rerun-if-env-changed=BUZZ_UPDATER_PUBLIC_KEY");
@@ -19,6 +20,18 @@ fn main() {
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_AGENT_ACCESS_OWNER_ONLY");
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_AUTO_CONNECT_DEFAULT_RELAY");
     println!("cargo:rustc-check-cfg=cfg(buzz_updater_enabled)");
+
+    let app_environment =
+        std::env::var("NAMLEH_APP_ENV").unwrap_or_else(|_| "development".to_string());
+    if !matches!(
+        app_environment.as_str(),
+        "development" | "staging" | "production"
+    ) {
+        panic!(
+            "NAMLEH_APP_ENV must be development, staging, or production; got {app_environment:?}"
+        );
+    }
+    println!("cargo:rustc-env=NAMLEH_DESKTOP_APP_ENV={app_environment}");
 
     // Explicit owner-only agent-access capability. Release packaging sets this
     // presence-only marker; OSS/custom builds leave agent access configurable.

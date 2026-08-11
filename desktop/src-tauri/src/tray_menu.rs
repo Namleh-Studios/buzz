@@ -333,10 +333,11 @@ fn build_menu<R: Runtime>(
         None::<&str>,
     )?)?;
     append_separator(app, &menu)?;
+    let app_name = app.package_info().name.clone();
     menu.append(&MenuItem::with_id(
         app,
         OPEN_BUZZ_ID,
-        "Open Buzz",
+        format!("Open {app_name}"),
         true,
         None::<&str>,
     )?)?;
@@ -344,7 +345,7 @@ fn build_menu<R: Runtime>(
     menu.append(&MenuItem::with_id(
         app,
         QUIT_ID,
-        "Quit Buzz",
+        format!("Quit {app_name}"),
         true,
         None::<&str>,
     )?)?;

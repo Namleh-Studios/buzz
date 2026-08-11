@@ -103,7 +103,6 @@ pub(crate) struct ResetContext<'a> {
     pub nest_dir: Option<PathBuf>,
     pub keychain: &'a dyn ResetKeychain,
     pub home_dir: Option<PathBuf>,
-    pub is_dev: bool,
 }
 
 /// Entry point called from `lib.rs` setup (before migrations).
@@ -115,24 +114,17 @@ pub(crate) fn run_boot_reset(app_data_dir: &Path) -> ResetOutcome {
         return ResetOutcome::default();
     }
 
-    let is_dev = app_data_dir
-        .file_name()
-        .and_then(|n| n.to_str())
-        .map(crate::migration::is_dev_data_dir_name)
-        .unwrap_or(false);
-
     let store = crate::secret_store::SecretStore::keyring(crate::app_state::keyring_service());
     let home_dir = dirs::home_dir();
-    let legacy_dir = crate::migration::legacy_app_data_dir(app_data_dir);
+    // Namleh reset never touches an upstream Buzz/Sprout data directory.
     let nest_dir = crate::managed_agents::nest_dir();
 
     let ctx = ResetContext {
         app_data_dir,
-        legacy_app_data_dir: legacy_dir,
+        legacy_app_data_dir: None,
         nest_dir,
         keychain: &store,
         home_dir,
-        is_dev,
     };
 
     run_boot_reset_with_keychain(ctx)
@@ -211,14 +203,12 @@ pub(crate) fn run_boot_reset_with_keychain(ctx: ResetContext<'_>) -> ResetOutcom
         None
     };
 
-    // ── Step 3: remove nest, ~/.sprout, ~/.config/buzz-agent, CLI symlink ────
+    // ── Step 3: remove only this environment's nest and CLI symlink ────────
     if let Some(ref nest) = ctx.nest_dir {
         let _ = std::fs::remove_dir_all(nest);
     }
     if let Some(ref home) = ctx.home_dir {
-        let _ = std::fs::remove_dir_all(home.join(".sprout"));
-        let _ = std::fs::remove_dir_all(home.join(".config").join("buzz-agent"));
-        let link_name = crate::managed_agents::cli_link_name(ctx.is_dev);
+        let link_name = crate::managed_agents::cli_link_name();
         let _ = std::fs::remove_file(home.join(".local").join("bin").join(link_name));
     }
 
@@ -399,7 +389,7 @@ mod tests {
     fn make_ctx<'a>(
         app_data_dir: &'a Path,
         keychain: &'a dyn ResetKeychain,
-        is_dev: bool,
+        _is_dev: bool,
     ) -> ResetContext<'a> {
         ResetContext {
             app_data_dir,
@@ -407,7 +397,6 @@ mod tests {
             nest_dir: None,
             keychain,
             home_dir: None, // skip nest/sprout/CLI ops in unit tests
-            is_dev,
         }
     }
 
@@ -450,7 +439,6 @@ mod tests {
             nest_dir: None,
             keychain: &kc,
             home_dir: None,
-            is_dev: false,
         };
 
         let outcome = run_boot_reset_with_keychain(ctx);
@@ -583,7 +571,6 @@ mod tests {
             nest_dir: Some(dev_nest.clone()),
             keychain: &kc,
             home_dir: None,
-            is_dev: true,
         };
 
         let outcome = run_boot_reset_with_keychain(ctx);
@@ -619,7 +606,6 @@ mod tests {
             nest_dir: Some(prod_nest.clone()),
             keychain: &kc,
             home_dir: None,
-            is_dev: false,
         };
 
         let outcome = run_boot_reset_with_keychain(ctx);
@@ -652,7 +638,6 @@ mod tests {
             nest_dir: None,
             keychain: &kc,
             home_dir: None,
-            is_dev: false,
         };
 
         let outcome = run_boot_reset_with_keychain(ctx);
@@ -735,7 +720,6 @@ mod tests {
             nest_dir: Some(dev_nest.clone()),
             keychain: &kc,
             home_dir: None,
-            is_dev: true,
         };
         let outcome = run_boot_reset_with_keychain(ctx);
         assert!(outcome.completed, "reset must complete");
@@ -829,7 +813,6 @@ mod tests {
             nest_dir: None,
             keychain: &kc1,
             home_dir: Some(tmp.path().to_path_buf()),
-            is_dev: false,
         };
         let first = run_boot_reset_with_keychain(ctx1);
         assert!(first.failed, "first attempt must fail");
@@ -852,7 +835,6 @@ mod tests {
             nest_dir: None,
             keychain: &kc2,
             home_dir: Some(tmp.path().to_path_buf()),
-            is_dev: false,
         };
         let second = run_boot_reset_with_keychain(ctx2);
         assert!(second.completed, "second attempt must complete");
@@ -863,5 +845,58 @@ mod tests {
         let trash_legacy = app_support.join("xyz.block.sprout.app.reset-trash");
         assert!(!trash_app.exists(), "app trash must be cleaned");
         assert!(!trash_legacy.exists(), "legacy trash must be cleaned");
+    }
+
+    #[test]
+    fn namleh_reset_preserves_upstream_data_and_cli() {
+        let tmp = TempDir::new().unwrap();
+        let home = tmp.path().join("home");
+        let app_data = home
+            .join("Library/Application Support")
+            .join("com.namlehstudios.buzz.dev");
+        let namleh_nest = home.join(".namleh-buzz-dev");
+        let upstream_nest = home.join(".sprout");
+        let upstream_config = home.join(".config/buzz-agent");
+        let local_bin = home.join(".local/bin");
+
+        for path in [
+            &app_data,
+            &namleh_nest,
+            &upstream_nest,
+            &upstream_config,
+            &local_bin,
+        ] {
+            std::fs::create_dir_all(path).unwrap();
+        }
+        let upstream_cli = local_bin.join("buzz");
+        let namleh_cli = local_bin.join("namleh-buzz-dev");
+        std::fs::write(&upstream_cli, "upstream").unwrap();
+        std::fs::write(&namleh_cli, "namleh").unwrap();
+        std::fs::write(upstream_nest.join("state"), "upstream").unwrap();
+        std::fs::write(upstream_config.join("config"), "upstream").unwrap();
+        write_sentinel(&app_data).unwrap();
+
+        let keychain = FakeKeychain::ok();
+        let outcome = run_boot_reset_with_keychain(ResetContext {
+            app_data_dir: &app_data,
+            legacy_app_data_dir: None,
+            nest_dir: Some(namleh_nest.clone()),
+            keychain: &keychain,
+            home_dir: Some(home),
+        });
+
+        assert!(outcome.completed);
+        assert!(!app_data.exists());
+        assert!(!namleh_nest.exists());
+        assert!(!namleh_cli.exists());
+        assert_eq!(std::fs::read_to_string(upstream_cli).unwrap(), "upstream");
+        assert_eq!(
+            std::fs::read_to_string(upstream_nest.join("state")).unwrap(),
+            "upstream"
+        );
+        assert_eq!(
+            std::fs::read_to_string(upstream_config.join("config")).unwrap(),
+            "upstream"
+        );
     }
 }

@@ -1,0 +1,16 @@
+{
+  "productName": "Namleh Buzz",
+  "identifier": "com.namlehstudios.buzz",
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["namleh-buzz"]
+      }
+    }
+  },
+  "bundle": {
+    "macOS": {
+      "entitlements": "Entitlements.namleh.production.plist"
+    }
+  }
+}

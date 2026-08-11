@@ -1,6 +1,8 @@
 export const INVITE_EXPIRED_ERROR = "invite_expired";
 export const INVITE_EXHAUSTED_ERROR = "invite_exhausted";
 
+import { isSupportedBuzzDeepLinkProtocol } from "@/shared/appIdentity";
+
 /**
  * Parsed invite — either a full (relay + code) or bare-code form.
  *
@@ -33,7 +35,7 @@ export function parseInviteInput(input: string): ParsedInvite | null {
 
     // buzz://join?relay=...&code=...
     // Non-special schemes put the authority in `host`, not `pathname`.
-    if (url.protocol === "buzz:") {
+    if (isSupportedBuzzDeepLinkProtocol(url.protocol)) {
       if (url.host !== "join") return null;
       const relay = url.searchParams.get("relay");
       const code = url.searchParams.get("code");
