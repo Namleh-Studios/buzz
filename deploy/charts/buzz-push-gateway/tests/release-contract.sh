@@ -16,8 +16,8 @@ for needle in (
     'push-chart-release/*)',
     'VERSION="${BRANCH#push-chart-release/}"',
     'TAG_PREFIX="push-chart-v"',
-    'DISPATCH="push-gateway-helm-chart"',
-    'push-gateway-helm-chart) WORKFLOW="push-gateway-helm-chart.yml"',
+    'gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs"',
+    '-f ref="refs/tags/$TAG"',
 ):
     assert needle in auto_text, f'missing auto-tag gateway chart contract: {needle}'
 for needle in (
