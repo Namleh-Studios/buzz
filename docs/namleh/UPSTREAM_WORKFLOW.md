@@ -36,14 +36,16 @@ independent staging build, deployment, and production release wiring.
 GitHub enforces the source contract:
 
 - `dev` and `main` require GitHub Actions-owned `CI Gate` and `DCO Check`
-  results, one CODEOWNER approval from someone other than the last pusher,
-  resolved conversations, linear history, and administrator enforcement;
-  branch deletion and force push are disabled. GitHub Actions cannot approve
-  pull requests.
+  results, a pull request, resolved conversations, linear history, and
+  administrator enforcement; branch deletion and force push are disabled.
+  The solo-founder workflow does not require a peer approval in GitHub. Owner
+  authorization, independent agent review and testing, and the automated gates
+  are the review contract. GitHub Actions cannot approve pull requests.
 - The `staging` environment accepts only `dev`.
-- The `production` environment accepts only `main` and requires approval from
-  Steven or Tim. The deployment requester cannot self-approve, and
-  administrators cannot bypass the environment gate.
+- The `production` environment accepts only `main` and requires Steven's
+  explicit approval. Steven may approve a deployment he requested because he
+  is the sole founder in this workflow; administrators cannot bypass the
+  environment gate.
 - Pull requests to `main` must come from `dev`; a checked-in source-policy job
   enforces the staging-to-production route.
 - Squash is the only enabled merge method, and merged feature branches are
