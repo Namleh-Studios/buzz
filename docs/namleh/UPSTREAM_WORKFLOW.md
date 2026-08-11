@@ -78,10 +78,10 @@ commit as:
 - product, UI, or architecture decision requiring explicit approval; or
 - out of scope.
 
-Port only the approved commits, using `git cherry-pick -x` when a commit can be
-accepted intact and a bounded manual adaptation otherwise. Do not merge draft,
-blocked, experimental, marketplace, remotely supplied UI, or generic app-host
-branches wholesale.
+Port only the approved commits, using `git cherry-pick -x --signoff` when a
+commit can be accepted intact and a bounded, signed-off manual adaptation
+otherwise. Do not merge draft, blocked, experimental, marketplace, remotely
+supplied UI, or generic app-host branches wholesale.
 
 Open the result as a pull request to `dev` using the upstream-sync template:
 
