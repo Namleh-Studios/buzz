@@ -97,6 +97,7 @@ jobs:
           scripts/test-dco-contract.sh
           scripts/test-branch-source-policy.sh
           deploy/charts/buzz-push-gateway/tests/release-contract.sh
+          node scripts/test-base-policy-contract.mjs
           node scripts/test-ci-gate-contract.mjs
           ruby scripts/test-namleh-publish-guards.rb
 

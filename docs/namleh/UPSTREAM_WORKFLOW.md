@@ -35,12 +35,19 @@ independent staging build, deployment, and production release wiring.
 
 GitHub enforces the source contract:
 
-- `dev` and `main` require GitHub Actions-owned `CI Gate` and `DCO Check`
-  results, a pull request, resolved conversations, linear history, and
-  administrator enforcement; branch deletion and force push are disabled.
+- `dev` and `main` require GitHub Actions-owned `Base Policy Gate`, `CI Gate`,
+  and `DCO Check` results, a pull request, resolved conversations, linear
+  history, and administrator enforcement; branch deletion and force push are
+  disabled.
   The solo-founder workflow does not require a peer approval in GitHub. Owner
   authorization, independent agent review and testing, and the automated gates
   are the review contract. GitHub Actions cannot approve pull requests.
+- `Base Policy Gate` runs through `pull_request_target` from the protected base
+  commit, checks DCO and the `dev`-to-`main` source route without executing PR
+  code, and rejects changes to workflow/action definitions or its protected
+  policy scripts unless `NAMLEH_POLICY_CHANGE_HEAD_SHA` matches the exact PR
+  head. A PR cannot replace this base-supplied failure with a same-named check;
+  duplicate required check names leave GitHub's result ambiguous and blocked.
 - The `staging` environment accepts only `dev`.
 - The `production` environment accepts only `main` and requires Steven's
   explicit approval. Steven may approve a deployment he requested because he
@@ -49,7 +56,8 @@ GitHub enforces the source contract:
 - Pull requests to `main` must come from `dev`; a checked-in source-policy job
   enforces the staging-to-production route.
 - Squash is the only enabled merge method, and merged feature branches are
-  deleted automatically.
+  deleted automatically. GitHub web commit signoff is required, and automated
+  squash merges provide an explicit matching `Signed-off-by` trailer.
 
 These policies do not themselves deploy or package an application. A workflow
 must explicitly reference the correct GitHub environment after the owning
@@ -57,6 +65,17 @@ environment ticket establishes that build or deployment.
 Inherited upstream publication jobs are fork-gated to `block/buzz`, so enabling
 them in the Namleh fork cannot publish a relay image, Helm chart, Sprig image,
 tag, or release around the Namleh environment contract.
+
+Policy files are changed only with explicit owner authorization for the exact
+commit under review:
+
+```bash
+HEAD_SHA=$(git rev-parse HEAD)
+gh variable set NAMLEH_POLICY_CHANGE_HEAD_SHA --repo Namleh-Studios/buzz --body "$HEAD_SHA"
+gh run rerun <base-policy-run-id> --repo Namleh-Studios/buzz
+# After the approved policy PR merges:
+gh variable delete NAMLEH_POLICY_CHANGE_HEAD_SHA --repo Namleh-Studios/buzz
+```
 
 ## Selective upstream sync
 
