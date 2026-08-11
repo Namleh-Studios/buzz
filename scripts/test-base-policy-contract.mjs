@@ -2,14 +2,18 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import {
   isLockedPolicyPath,
+  policyPathsFromFiles,
+  signoffEmails,
+  validateApiCompleteness,
   validateDco,
+  validateDefaultBranch,
   validatePolicyChanges,
   validateSource,
 } from "./check-base-policy.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/base-policy.yml", import.meta.url), "utf8");
 assert.match(workflow, /^\s*pull_request_target:\s*$/m);
-assert.match(workflow, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+assert.match(workflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
 assert.match(workflow, /persist-credentials: false/);
 assert.match(workflow, /run: node scripts\/check-base-policy\.mjs/);
 assert.doesNotMatch(workflow, /pull_request\.head\.sha[^\n]*ref:/);
@@ -18,7 +22,14 @@ assert.equal(isLockedPolicyPath(".github/workflows/ci.yml"), true);
 assert.equal(isLockedPolicyPath(".github/workflows/spoof.yaml"), true);
 assert.equal(isLockedPolicyPath(".github/actions/local/action.yml"), true);
 assert.equal(isLockedPolicyPath("scripts/check-base-policy.mjs"), true);
+assert.equal(isLockedPolicyPath("AGENTS.md"), true);
+assert.equal(isLockedPolicyPath(".github/CODEOWNERS"), true);
+assert.equal(isLockedPolicyPath("scripts/configure-namleh-remotes.sh"), true);
+assert.equal(isLockedPolicyPath("scripts/resolve-github-origin-repo.sh"), true);
 assert.equal(isLockedPolicyPath("desktop/src/main.tsx"), false);
+
+validateDefaultBranch("dev");
+assert.throws(() => validateDefaultBranch("main"), /default branch must be dev/);
 
 validateSource({
   baseRef: "dev",
@@ -52,6 +63,11 @@ const signedCommit = {
   },
 };
 validateDco([signedCommit]);
+assert.deepEqual(signoffEmails(signedCommit.commit.message), ["author@example.com"]);
+assert.deepEqual(
+  signoffEmails("Subject\n\nSigned-off-by: Author <author@example.com>\n\nBody after the supposed trailer"),
+  [],
+);
 assert.throws(
   () =>
     validateDco([
@@ -62,6 +78,20 @@ assert.throws(
       },
     ]),
   /unsigned/,
+);
+assert.throws(
+  () =>
+    validateDco([
+      {
+        ...signedCommit,
+        sha: "body-signoff",
+        commit: {
+          ...signedCommit.commit,
+          message: "Subject\n\nSigned-off-by: Author <author@example.com>\n\nBody after the supposed trailer",
+        },
+      },
+    ]),
+  /body-signoff/,
 );
 
 validatePolicyChanges({ paths: ["desktop/src/main.tsx"], approvedHeadSha: "", headSha: "abc" });
@@ -74,6 +104,59 @@ assert.throws(
       headSha: "abc",
     }),
   /NAMLEH_POLICY_CHANGE_HEAD_SHA=abc/,
+);
+
+assert.deepEqual(
+  policyPathsFromFiles([
+    {
+      filename: "docs/renamed.yml",
+      previous_filename: ".github/workflows/base-policy.yml",
+      status: "renamed",
+    },
+  ]),
+  ["docs/renamed.yml", ".github/workflows/base-policy.yml"],
+);
+assert.throws(
+  () => policyPathsFromFiles([{ filename: "docs/renamed.yml", status: "renamed" }]),
+  /omitted previous_filename/,
+);
+assert.throws(() => policyPathsFromFiles([{ status: "modified" }]), /valid filename/);
+assert.throws(
+  () =>
+    validatePolicyChanges({
+      paths: policyPathsFromFiles([
+        {
+          filename: "docs/renamed.yml",
+          previous_filename: ".github/workflows/base-policy.yml",
+          status: "renamed",
+        },
+      ]),
+      approvedHeadSha: "",
+      headSha: "abc",
+    }),
+  /base-policy\.yml/,
+);
+
+validateApiCompleteness({
+  pullRequest: { commits: 1, changed_files: 1 },
+  commits: [signedCommit],
+  files: [{ filename: "README.md", status: "modified" }],
+});
+assert.throws(
+  () => validateApiCompleteness({ pullRequest: { commits: 250, changed_files: 1 }, commits: [], files: [{}] }),
+  /250 or more commits/,
+);
+assert.throws(
+  () => validateApiCompleteness({ pullRequest: { commits: 1, changed_files: 3000 }, commits: [], files: [] }),
+  /3000 or more changed files/,
+);
+assert.throws(
+  () => validateApiCompleteness({ pullRequest: { commits: 2, changed_files: 1 }, commits: [signedCommit], files: [{}] }),
+  /commit list is incomplete/,
+);
+assert.throws(
+  () => validateApiCompleteness({ pullRequest: { commits: 1, changed_files: 2 }, commits: [signedCommit], files: [{}] }),
+  /file list is incomplete/,
 );
 
 console.log("Base Policy Gate contract passed.");

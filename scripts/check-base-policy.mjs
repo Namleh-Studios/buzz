@@ -1,10 +1,21 @@
+import { execFileSync } from "node:child_process";
+
 const lockedPrefixes = [".github/workflows/", ".github/actions/"];
 const lockedFiles = new Set([
+  ".github/CODEOWNERS",
+  "AGENTS.md",
+  "docs/namleh/UPSTREAM_WORKFLOW.md",
   "scripts/check-base-policy.mjs",
   "scripts/check-branch-source-policy.sh",
   "scripts/check-dco.sh",
+  "scripts/configure-namleh-remotes.sh",
+  "scripts/resolve-github-origin-repo.sh",
   "scripts/test-base-policy-contract.mjs",
+  "scripts/test-branch-source-policy.sh",
   "scripts/test-ci-gate-contract.mjs",
+  "scripts/test-dco-contract.sh",
+  "scripts/test-github-origin-repo.sh",
+  "scripts/test-namleh-fork-contract.sh",
   "scripts/test-namleh-publish-guards.rb",
 ]);
 
@@ -18,6 +29,21 @@ export function validateSource({ baseRef, headRef, headRepository, repository })
   }
 }
 
+export function validateDefaultBranch(defaultBranch) {
+  if (defaultBranch !== "dev") throw new Error(`repository default branch must be dev; received ${defaultBranch}`);
+}
+
+export function signoffEmails(message) {
+  const trailers = execFileSync("git", ["interpret-trailers", "--parse"], {
+    input: message,
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+  });
+  return [...trailers.matchAll(/^Signed-off-by:\s*.+<([^<>]+)>\s*$/gim)].map((match) =>
+    match[1].toLowerCase(),
+  );
+}
+
 export function validateDco(commits) {
   if (commits.length === 0) throw new Error("pull request contains no commits");
 
@@ -29,9 +55,7 @@ export function validateDco(commits) {
         .filter(Boolean)
         .map((email) => email.toLowerCase()),
     );
-    const signoffs = [...(commit.message ?? "").matchAll(/^Signed-off-by:\s*.+<([^<>]+)>\s*$/gim)].map(
-      (match) => match[1].toLowerCase(),
-    );
+    const signoffs = signoffEmails(commit.message ?? "");
     if (!signoffs.some((email) => emails.has(email))) failures.push(entry.sha ?? "unknown commit");
   }
 
@@ -49,19 +73,66 @@ export function validatePolicyChanges({ paths, approvedHeadSha, headSha }) {
   }
 }
 
+export function policyPathsFromFiles(files) {
+  const paths = [];
+  for (const file of files) {
+    if (typeof file.filename !== "string" || file.filename.length === 0) {
+      throw new Error("GitHub returned a file without a valid filename");
+    }
+    paths.push(file.filename);
+
+    if (file.previous_filename !== undefined) {
+      if (typeof file.previous_filename !== "string" || file.previous_filename.length === 0) {
+        throw new Error(`GitHub returned an invalid previous_filename for ${file.filename}`);
+      }
+      paths.push(file.previous_filename);
+    } else if (file.status === "renamed") {
+      throw new Error(`GitHub omitted previous_filename for renamed file ${file.filename}`);
+    }
+  }
+  return paths;
+}
+
+export function validateApiCompleteness({ pullRequest, commits, files }) {
+  const commitCount = pullRequest.commits;
+  const fileCount = pullRequest.changed_files;
+  if (!Number.isInteger(commitCount) || commitCount < 1) {
+    throw new Error("GitHub returned an invalid pull request commit count");
+  }
+  if (!Number.isInteger(fileCount) || fileCount < 0) {
+    throw new Error("GitHub returned an invalid pull request file count");
+  }
+  if (commitCount >= 250) {
+    throw new Error("pull requests with 250 or more commits exceed the trusted API review bound");
+  }
+  if (fileCount >= 3000) {
+    throw new Error("pull requests with 3000 or more changed files exceed the trusted API review bound");
+  }
+  if (commits.length !== commitCount) {
+    throw new Error(`GitHub commit list is incomplete: expected ${commitCount}, received ${commits.length}`);
+  }
+  if (files.length !== fileCount) {
+    throw new Error(`GitHub file list is incomplete: expected ${fileCount}, received ${files.length}`);
+  }
+}
+
+async function githubJson(path, token) {
+  const response = await fetch(`https://api.github.com${path}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
+  return response.json();
+}
+
 async function listGithub(path, token) {
   const items = [];
   for (let page = 1; ; page += 1) {
     const separator = path.includes("?") ? "&" : "?";
-    const response = await fetch(`https://api.github.com${path}${separator}per_page=100&page=${page}`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    });
-    if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
-    const batch = await response.json();
+    const batch = await githubJson(`${path}${separator}per_page=100&page=${page}`, token);
     if (!Array.isArray(batch)) throw new Error("GitHub API did not return a list");
     items.push(...batch);
     if (batch.length < 100) return items;
@@ -78,11 +149,13 @@ async function main() {
     "HEAD_REF",
     "HEAD_REPOSITORY",
     "HEAD_SHA",
+    "DEFAULT_BRANCH",
   ];
   for (const name of required) {
     if (!env[name]) throw new Error(`${name} is required`);
   }
 
+  validateDefaultBranch(env.DEFAULT_BRANCH);
   validateSource({
     baseRef: env.BASE_REF,
     headRef: env.HEAD_REF,
@@ -91,13 +164,15 @@ async function main() {
   });
 
   const root = `/repos/${env.REPOSITORY}/pulls/${env.PR_NUMBER}`;
-  const [commits, files] = await Promise.all([
+  const [pullRequest, commits, files] = await Promise.all([
+    githubJson(root, env.GITHUB_TOKEN),
     listGithub(`${root}/commits`, env.GITHUB_TOKEN),
     listGithub(`${root}/files`, env.GITHUB_TOKEN),
   ]);
+  validateApiCompleteness({ pullRequest, commits, files });
   validateDco(commits);
   validatePolicyChanges({
-    paths: files.map((file) => file.filename),
+    paths: policyPathsFromFiles(files),
     approvedHeadSha: env.APPROVED_POLICY_HEAD_SHA ?? "",
     headSha: env.HEAD_SHA,
   });

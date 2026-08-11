@@ -27,7 +27,7 @@ git fetch origin dev
 git switch -c codex/<ticket>-<slug> origin/dev
 ```
 
-`dev` is the staging source. `main` is the production source. Both branches
+`dev` is the repository default and staging source. `main` is the production source. Both branches
 are protected against direct and force pushes. Production promotion or release
 requires explicit founder approval. OPS-196 establishes these source and
 approval boundaries; later fork-baseline tickets establish and prove the
@@ -43,7 +43,7 @@ GitHub enforces the source contract:
   authorization, independent agent review and testing, and the automated gates
   are the review contract. GitHub Actions cannot approve pull requests.
 - `Base Policy Gate` runs through `pull_request_target` from the protected base
-  commit, checks DCO and the `dev`-to-`main` source route without executing PR
+  workflow and policy script on the default `dev` branch, checks DCO and the `dev`-to-`main` source route without executing PR
   code, and rejects changes to workflow/action definitions or its protected
   policy scripts unless `NAMLEH_POLICY_CHANGE_HEAD_SHA` matches the exact PR
   head. A PR cannot replace this base-supplied failure with a same-named check;
