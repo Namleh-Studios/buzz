@@ -34,7 +34,7 @@ function StagingIndicator() {
   if (NAMLEH_APP_ENVIRONMENT !== "staging") return null;
   return (
     <div
-      className="pointer-events-none fixed top-2 left-1/2 z-50 -translate-x-1/2 rounded-full border border-warning/50 bg-warning px-3 py-1 font-semibold text-foreground text-xs shadow-md"
+      className="pointer-events-none fixed top-2 left-1/2 z-[100] -translate-x-1/2 rounded-full border border-black/25 bg-warning px-3 py-1 font-semibold text-black text-xs shadow-md"
       data-testid="staging-indicator"
     >
       STAGING

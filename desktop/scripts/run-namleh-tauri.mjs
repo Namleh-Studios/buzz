@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -16,26 +16,64 @@ if (!["staging", "production"].includes(environment)) {
 }
 
 const identity = identities[environment];
-const result = spawnSync(
-  "pnpm",
-  [
-    "tauri",
-    "build",
-    "--no-sign",
-    "--config",
-    `src-tauri/tauri.namleh.${environment}.conf.json`,
-  ],
-  {
-    cwd: desktopDirectory,
-    env: {
-      ...process.env,
-      NAMLEH_APP_ENV: environment,
-      VITE_NAMLEH_APP_ENV: environment,
-      VITE_NAMLEH_DEEP_LINK_SCHEME: identity.deepLinkScheme,
-    },
-    stdio: "inherit",
-  },
+const updaterPublicKey = process.env[identity.updaterPublicKeyEnv]?.trim();
+const updaterPrivateKey = process.env[identity.updaterPrivateKeyEnv]?.trim();
+const updaterEndpoint = process.env[identity.updaterEndpointEnv]?.trim();
+const missing = [];
+if (!updaterPublicKey) missing.push(identity.updaterPublicKeyEnv);
+if (!updaterPrivateKey) missing.push(identity.updaterPrivateKeyEnv);
+if (!updaterEndpoint) missing.push(identity.updaterEndpointEnv);
+if (missing.length > 0) {
+  console.error(
+    `Missing required environment variable(s): ${missing.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+const buildEnvironment = {
+  ...process.env,
+  NAMLEH_APP_ENV: environment,
+  VITE_NAMLEH_APP_ENV: environment,
+  VITE_NAMLEH_DEEP_LINK_SCHEME: identity.deepLinkScheme,
+  BUZZ_UPDATER_PUBLIC_KEY: updaterPublicKey,
+  BUZZ_UPDATER_ENDPOINT: updaterEndpoint,
+  TAURI_SIGNING_PRIVATE_KEY: updaterPrivateKey,
+  APPLE_SIGNING_IDENTITY: identity.signingIdentity,
+  NAMLEH_UPDATER_AUTHORIZATION_AUDIENCE: identity.updaterAuthorizationAudience,
+  NAMLEH_UPDATER_CHANNEL: identity.updaterChannel,
+  NAMLEH_UPDATER_MANIFEST_NAMESPACE: identity.updaterManifestNamespace,
+};
+const generatedConfig = resolve(
+  desktopDirectory,
+  `src-tauri/tauri.namleh.${environment}.release.conf.json`,
 );
 
-if (result.error) throw result.error;
-process.exit(result.status ?? 1);
+try {
+  const configResult = spawnSync(
+    process.execPath,
+    [
+      resolve(desktopDirectory, "scripts/build-namleh-release-config.mjs"),
+      environment,
+    ],
+    { cwd: desktopDirectory, env: buildEnvironment, stdio: "inherit" },
+  );
+  if (configResult.error) throw configResult.error;
+  if (configResult.status !== 0) process.exit(configResult.status ?? 1);
+
+  const result = spawnSync(
+    "pnpm",
+    [
+      "tauri",
+      "build",
+      "--features",
+      "mesh-llm",
+      "--config",
+      `src-tauri/tauri.namleh.${environment}.release.conf.json`,
+    ],
+    { cwd: desktopDirectory, env: buildEnvironment, stdio: "inherit" },
+  );
+  if (result.error) throw result.error;
+  process.exitCode = result.status ?? 1;
+} finally {
+  if (existsSync(generatedConfig)) unlinkSync(generatedConfig);
+}

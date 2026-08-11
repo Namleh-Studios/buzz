@@ -1,4 +1,4 @@
-//! Canonical `buzz://` deep links for Buzz-hosted git entities.
+//! Canonical Namleh Buzz deep links for Buzz-hosted git entities.
 //!
 //! Buzz Desktop renders these links as rich preview cards in chat and
 //! navigates in-app when they are clicked. The desktop parser lives in
@@ -9,19 +9,40 @@
 //! Callers are expected to validate inputs first (`validate_hex64`,
 //! `validate_repo_id`); the identifier charsets need no URL encoding.
 
-/// Build a `buzz://repo` link for a repository announcement (kind 30617).
+const DEFAULT_DEEP_LINK_SCHEME: &str = "namleh-buzz";
+
+fn resolve_deep_link_scheme(configured: Option<&str>) -> &str {
+    match configured.map(str::trim).filter(|value| !value.is_empty()) {
+        Some("namleh-buzz-dev") => "namleh-buzz-dev",
+        Some("namleh-buzz-staging") => "namleh-buzz-staging",
+        Some("namleh-buzz") | None => DEFAULT_DEEP_LINK_SCHEME,
+        Some(_) => DEFAULT_DEEP_LINK_SCHEME,
+    }
+}
+
+fn deep_link_scheme() -> String {
+    resolve_deep_link_scheme(std::env::var("BUZZ_DEEP_LINK_SCHEME").ok().as_deref()).to_string()
+}
+
+/// Build a repository link for a repository announcement (kind 30617).
 pub fn repo_link(owner: &str, repo_id: &str) -> String {
-    format!("buzz://repo?owner={owner}&d={repo_id}")
+    format!("{}://repo?owner={owner}&d={repo_id}", deep_link_scheme())
 }
 
-/// Build a `buzz://pr` link for a pull request event (kind 1618).
+/// Build a pull-request link for a pull request event (kind 1618).
 pub fn pull_request_link(event_id: &str, owner: &str, repo_id: &str) -> String {
-    format!("buzz://pr?id={event_id}&owner={owner}&d={repo_id}")
+    format!(
+        "{}://pr?id={event_id}&owner={owner}&d={repo_id}",
+        deep_link_scheme()
+    )
 }
 
-/// Build a `buzz://issue` link for an issue event (kind 1621).
+/// Build an issue link for an issue event (kind 1621).
 pub fn issue_link(event_id: &str, owner: &str, repo_id: &str) -> String {
-    format!("buzz://issue?id={event_id}&owner={owner}&d={repo_id}")
+    format!(
+        "{}://issue?id={event_id}&owner={owner}&d={repo_id}",
+        deep_link_scheme()
+    )
 }
 
 #[cfg(test)]
@@ -37,15 +58,29 @@ mod tests {
     fn golden_format_matches_desktop() {
         assert_eq!(
             pull_request_link(EVENT_ID, OWNER, "buzz-world"),
-            format!("buzz://pr?id={EVENT_ID}&owner={OWNER}&d=buzz-world")
+            format!("namleh-buzz://pr?id={EVENT_ID}&owner={OWNER}&d=buzz-world")
         );
         assert_eq!(
             issue_link(EVENT_ID, OWNER, "buzz-world"),
-            format!("buzz://issue?id={EVENT_ID}&owner={OWNER}&d=buzz-world")
+            format!("namleh-buzz://issue?id={EVENT_ID}&owner={OWNER}&d=buzz-world")
         );
         assert_eq!(
             repo_link(OWNER, "buzz-world"),
-            format!("buzz://repo?owner={OWNER}&d=buzz-world")
+            format!("namleh-buzz://repo?owner={OWNER}&d=buzz-world")
         );
+    }
+
+    #[test]
+    fn scheme_resolution_rejects_upstream_and_unknown_schemes() {
+        assert_eq!(
+            resolve_deep_link_scheme(Some("namleh-buzz-dev")),
+            "namleh-buzz-dev"
+        );
+        assert_eq!(
+            resolve_deep_link_scheme(Some("namleh-buzz-staging")),
+            "namleh-buzz-staging"
+        );
+        assert_eq!(resolve_deep_link_scheme(Some("buzz")), "namleh-buzz");
+        assert_eq!(resolve_deep_link_scheme(Some("https")), "namleh-buzz");
     }
 }

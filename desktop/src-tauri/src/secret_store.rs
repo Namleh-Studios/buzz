@@ -270,7 +270,9 @@ fn is_dpk_unavailable(e: &SFError) -> bool {
 fn dpk_opts(service: &str, key: &str) -> PasswordOptions {
     let mut opts = PasswordOptions::new_generic_password(service, key);
     opts.use_protected_keychain();
-    opts.set_access_group(crate::app_identity::current().keychain_access_group);
+    if let Some(access_group) = crate::app_identity::current().keychain_access_group {
+        opts.set_access_group(access_group);
+    }
     opts
 }
 

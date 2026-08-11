@@ -28,6 +28,7 @@ fi
 export NAMLEH_APP_ENV=development
 export VITE_NAMLEH_APP_ENV=development
 export VITE_NAMLEH_DEEP_LINK_SCHEME=namleh-buzz-dev
+export BUZZ_DEEP_LINK_SCHEME=namleh-buzz-dev
 BUZZ_TAURI_CONFIG="{\"build\":{\"devUrl\":\"${DEV_URL}\",\"beforeDevCommand\":\"exec ./node_modules/.bin/vite --port ${BUZZ_VITE_PORT} --strictPort\"},\"identifier\":\"com.namlehstudios.buzz.dev\",\"productName\":\"Namleh Buzz Dev\"}"
 unset VITE_DEV_BRANCH
 

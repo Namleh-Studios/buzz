@@ -17,10 +17,12 @@ pub(crate) struct AppIdentity {
     pub bundle_identifier: &'static str,
     pub deep_link_scheme: &'static str,
     pub keyring_service: &'static str,
-    pub keychain_access_group: &'static str,
+    pub keychain_access_group: Option<&'static str>,
     pub nest_directory: &'static str,
     pub managed_runtime_directory: &'static str,
     pub cli_link_name: &'static str,
+    pub provider_binding_path: &'static str,
+    pub browser_checkpoint_path: &'static str,
 }
 
 const DEVELOPMENT: AppIdentity = AppIdentity {
@@ -29,10 +31,12 @@ const DEVELOPMENT: AppIdentity = AppIdentity {
     bundle_identifier: "com.namlehstudios.buzz.dev",
     deep_link_scheme: "namleh-buzz-dev",
     keyring_service: "com.namlehstudios.buzz.dev.credentials",
-    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz.dev",
+    keychain_access_group: None,
     nest_directory: ".namleh-buzz-dev",
     managed_runtime_directory: "Namleh Buzz Dev",
     cli_link_name: "namleh-buzz-dev",
+    provider_binding_path: "com.namlehstudios.buzz.dev/provider-bindings",
+    browser_checkpoint_path: "com.namlehstudios.buzz.dev/browser-checkpoints",
 };
 
 const STAGING: AppIdentity = AppIdentity {
@@ -41,10 +45,12 @@ const STAGING: AppIdentity = AppIdentity {
     bundle_identifier: "com.namlehstudios.buzz.staging",
     deep_link_scheme: "namleh-buzz-staging",
     keyring_service: "com.namlehstudios.buzz.staging.credentials",
-    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz.staging",
+    keychain_access_group: Some("962M5A4PL7.com.namlehstudios.buzz.staging"),
     nest_directory: ".namleh-buzz-staging",
     managed_runtime_directory: "Namleh Buzz Staging",
     cli_link_name: "namleh-buzz-staging",
+    provider_binding_path: "com.namlehstudios.buzz.staging/provider-bindings",
+    browser_checkpoint_path: "com.namlehstudios.buzz.staging/browser-checkpoints",
 };
 
 const PRODUCTION: AppIdentity = AppIdentity {
@@ -53,10 +59,12 @@ const PRODUCTION: AppIdentity = AppIdentity {
     bundle_identifier: "com.namlehstudios.buzz",
     deep_link_scheme: "namleh-buzz",
     keyring_service: "com.namlehstudios.buzz.credentials",
-    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz",
+    keychain_access_group: Some("962M5A4PL7.com.namlehstudios.buzz"),
     nest_directory: ".namleh-buzz",
     managed_runtime_directory: "Namleh Buzz",
     cli_link_name: "namleh-buzz",
+    provider_binding_path: "com.namlehstudios.buzz/provider-bindings",
+    browser_checkpoint_path: "com.namlehstudios.buzz/browser-checkpoints",
 };
 
 pub(crate) fn current() -> &'static AppIdentity {
@@ -69,7 +77,7 @@ pub(crate) fn current() -> &'static AppIdentity {
 }
 
 #[cfg(any(feature = "mesh-llm", test))]
-pub(crate) fn mesh_cache_environment() -> [(&'static str, PathBuf); 6] {
+pub(crate) fn mesh_cache_environment() -> [(&'static str, PathBuf); 7] {
     let root = dirs::cache_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join(current().bundle_identifier)
@@ -84,6 +92,7 @@ pub(crate) fn mesh_cache_environment() -> [(&'static str, PathBuf); 6] {
         ("HF_XET_CACHE", root.join("huggingface").join("xet")),
         ("MESH_LLM_DATA_DIR", root.join("data")),
         ("MESH_LLM_RUNTIME_ROOT", root.join("runtime")),
+        ("MESH_LLM_HASH_CACHE_DIR", root.join("hashes")),
     ]
 }
 
@@ -120,6 +129,17 @@ pub(crate) fn validate_runtime_config<R: Runtime>(app: &AppHandle<R>) -> Result<
             app.package_info().name
         ));
     }
+    for path in [
+        identity.provider_binding_path,
+        identity.browser_checkpoint_path,
+    ] {
+        if !path.starts_with(identity.bundle_identifier) {
+            return Err(format!(
+                "compiled {} identity has an unscoped storage path {path}",
+                identity.bundle_identifier
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -134,7 +154,14 @@ mod tests {
         assert_eq!(identity.bundle_identifier, "com.namlehstudios.buzz.dev");
         assert_eq!(identity.deep_link_scheme, "namleh-buzz-dev");
         assert!(!identity.keyring_service.contains("buzz-desktop"));
+        assert_eq!(identity.keychain_access_group, None);
         assert!(!identity.nest_directory.starts_with(".buzz"));
+        assert!(identity
+            .provider_binding_path
+            .starts_with(identity.bundle_identifier));
+        assert!(identity
+            .browser_checkpoint_path
+            .starts_with(identity.bundle_identifier));
     }
 
     #[test]

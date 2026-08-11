@@ -28,6 +28,12 @@ if (missing.length > 0) {
   );
   process.exit(1);
 }
+if (updaterEndpoint !== identity.updaterEndpoint) {
+  console.error(
+    `${identity.updaterEndpointEnv} must equal ${identity.updaterEndpoint}`,
+  );
+  process.exit(1);
+}
 
 let parsedEndpoint;
 try {
@@ -40,6 +46,16 @@ if (parsedEndpoint.protocol !== "https:") {
   console.error(`${identity.updaterEndpointEnv} must use HTTPS`);
   process.exit(1);
 }
+if (parsedEndpoint.username || parsedEndpoint.password) {
+  console.error(`${identity.updaterEndpointEnv} must not contain credentials`);
+  process.exit(1);
+}
+if (parsedEndpoint.origin !== "https://updates.namlehstudios.com") {
+  console.error(
+    `${identity.updaterEndpointEnv} must use https://updates.namlehstudios.com`,
+  );
+  process.exit(1);
+}
 const endpointSegments = parsedEndpoint.pathname.split("/");
 if (!endpointSegments.includes(identity.updaterManifestNamespace)) {
   console.error(
@@ -50,6 +66,28 @@ if (!endpointSegments.includes(identity.updaterManifestNamespace)) {
 if (!endpointSegments.includes(identity.updaterChannel)) {
   console.error(
     `${identity.updaterEndpointEnv} must include the ${identity.updaterChannel} updater channel`,
+  );
+  process.exit(1);
+}
+const otherEnvironment = environment === "staging" ? "production" : "staging";
+const otherIdentity = identities[otherEnvironment];
+if (
+  endpointSegments.includes(otherIdentity.updaterManifestNamespace) ||
+  endpointSegments.includes(otherIdentity.updaterChannel)
+) {
+  console.error(
+    `${identity.updaterEndpointEnv} must not reference the ${otherEnvironment} updater`,
+  );
+  process.exit(1);
+}
+const expectedPath = `/${identity.updaterManifestNamespace}/${identity.updaterChannel}/latest.json`;
+if (
+  parsedEndpoint.pathname !== expectedPath ||
+  parsedEndpoint.search ||
+  parsedEndpoint.hash
+) {
+  console.error(
+    `${identity.updaterEndpointEnv} must equal https://updates.namlehstudios.com${expectedPath}`,
   );
   process.exit(1);
 }

@@ -179,6 +179,31 @@ test("parseSupportedLinkPreview parses buzz:// PR and issue deep links", () => {
   );
 });
 
+test("extractSupportedLinkPreviews finds canonical Namleh entity links", () => {
+  const href = `${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world`;
+  assert.deepEqual(extractSupportedLinkPreviews(href, null), [
+    {
+      kind: "buzz-repository",
+      href,
+      provider: "Buzz",
+      title: "buzz-world",
+      typeLabel: "repo",
+    },
+  ]);
+  assert.deepEqual(
+    extractSupportedLinkPreviews(`[buzz-world](${href})`, null),
+    [
+      {
+        kind: "buzz-repository",
+        href,
+        provider: "Buzz",
+        title: "buzz-world",
+        typeLabel: "repo",
+      },
+    ],
+  );
+});
+
 test("parseSupportedLinkPreview rejects malformed buzz:// entity links", () => {
   for (const href of [
     `buzz://pr?owner=${BUZZ_OWNER}&d=buzz-world`,
