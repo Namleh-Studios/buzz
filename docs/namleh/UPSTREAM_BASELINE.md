@@ -74,7 +74,7 @@ map to the required surfaces as follows:
 | Media | Relay image/video/authorization suites in `e2e_media*.rs`; mobile upload tests | No material protocol gap in the tested formats. |
 | Drafts | Desktop channel-switch/send-clear specs and mobile persistence/isolation tests | Desktop process-relaunch persistence is not gated. |
 | Reconnect/backfill | Desktop reconnect/backfill specs and mobile replay tests | The real relay-restart spec is skipped unless `BUZZ_E2E_RELAY_RESTART=1`. |
-| Agents | Desktop relay catalog/import integration specs | Real agent wake/execution and `e2e_managed_agent.rs` are not in CI. |
+| Agents | Desktop mock-bridge catalog/import specs | No live relay catalog/import round-trip; real agent wake/execution and `e2e_managed_agent.rs` are not in CI. |
 | Canvas | SDK builder and desktop placement/unreachable tests | No live Canvas set/get round-trip; the SDK builder test is outside `just test-unit`. |
 | Doc/notes | `buzz-cli` note validation/event-shape unit tests | The complete `e2e_long_form.rs` NIP-23 suite is not invoked by CI. |
 | Git | Desktop repository/commit/branch UI smoke specs | `e2e_git.rs` live clone/push/fetch/concurrency tests are not invoked. |
