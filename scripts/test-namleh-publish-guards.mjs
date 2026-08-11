@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const workflowDirectory = resolve(root, ".github/workflows");
-const dangerousPattern = /(?:contents|packages|id-token|attestations):\s*write|permission-contents:\s*write|docker\/build-push-action|\bhelm push\b|\bgh release (?:create|edit|upload)\b|\bgit push\b/;
+const permissionPattern = /permissions:\s*write-all|(?:contents|packages|id-token|attestations):\s*write|permission-contents:\s*write/;
+const dangerousPattern = /permissions:\s*write-all|(?:contents|packages|id-token|attestations):\s*write|permission-contents:\s*write|docker\/build-push-action|\bhelm push\b|\bgh release (?:create|edit|upload)\b|\bgit push\b/;
 
 function jobBlocks(file, workflow) {
   const jobsStart = workflow.indexOf("\njobs:\n");
@@ -60,11 +61,13 @@ function hasExclusiveUpstreamGuard(condition) {
 }
 
 let guardedCount = 0;
-for (const name of readdirSync(workflowDirectory).filter((file) => file.endsWith(".yml")).sort()) {
+for (const name of readdirSync(workflowDirectory).filter((file) => /\.ya?ml$/.test(file)).sort()) {
   const file = `.github/workflows/${name}`;
   const workflow = readFileSync(resolve(root, file), "utf8");
+  const jobsStart = workflow.indexOf("\njobs:\n");
+  const workflowHasWritePermissions = jobsStart >= 0 && permissionPattern.test(workflow.slice(0, jobsStart));
   for (const job of jobBlocks(file, workflow)) {
-    if (!dangerousPattern.test(job.text)) continue;
+    if (!workflowHasWritePermissions && !dangerousPattern.test(job.text)) continue;
     const condition = conditionFor(job.text);
     if (!hasExclusiveUpstreamGuard(condition)) {
       throw new Error(`${file}: write-capable job ${job.id} is not exclusively fork-gated to block/buzz`);
