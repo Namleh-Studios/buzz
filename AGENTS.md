@@ -15,6 +15,10 @@ All feature branches open pull requests into protected `dev`. A merge to
 `dev` is the staging source and must pass the remote CI gate. Protected `main`
 is the production source; do not open or merge `dev` to `main`, create a
 production release, or deploy production without explicit founder approval.
+Owner authorization, independent agent review and testing, and green automated
+gates are sufficient for a Namleh pull request; no peer GitHub approval is
+required. This fork rule overrides the upstream maintainer-approval language in
+`CONTRIBUTING.md`.
 The environment-specific staging build and deployment are established by the
 fork-baseline tickets that follow OPS-196; do not represent them as available
 before those tickets pass their stage gate.
@@ -22,9 +26,9 @@ before those tickets pass their stage gate.
 Upstream changes are never merged directly. Follow
 [`docs/namleh/UPSTREAM_WORKFLOW.md`](docs/namleh/UPSTREAM_WORKFLOW.md): fetch,
 review the exact commit range, classify every relevant change, create a fresh
-sync branch from `origin/dev`, and open a reviewed PR to `dev`. Preserve the
-Apache-2.0 license, copyright notices, dependency licenses, migrations, and
-protocol compatibility for every accepted port.
+sync branch from `origin/dev`, and open an independently agent-reviewed PR to
+`dev`. Preserve the Apache-2.0 license, copyright notices, dependency licenses,
+migrations, and protocol compatibility for every accepted port.
 
 Local verification must not start Docker or a local service stack. Use the
 no-infrastructure checks locally; relay/database integration tests run on
