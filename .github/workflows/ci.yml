@@ -96,6 +96,7 @@ jobs:
           scripts/test-github-origin-repo.sh
           scripts/test-dco-contract.sh
           node scripts/test-ci-gate-contract.mjs
+          node scripts/test-namleh-publish-guards.mjs
 
   dco:
     name: DCO Check

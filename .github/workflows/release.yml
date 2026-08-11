@@ -654,6 +654,7 @@ jobs:
 
   release-windows:
     name: Release Windows
+    if: github.repository == 'block/buzz'
     runs-on: windows-latest
     needs: setup
     timeout-minutes: 60
@@ -780,6 +781,7 @@ jobs:
     # Only the tag-bound setup path can reach this job.
     if: |
       always() &&
+      github.repository == 'block/buzz' &&
       needs.setup.result == 'success' &&
       needs.release.result == 'success' &&
       needs.release-macos-x64.result == 'success' &&
