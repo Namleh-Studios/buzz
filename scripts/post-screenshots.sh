@@ -20,7 +20,10 @@ GH_USER=$(gh api user --jq .login)
 BRANCH="agent-screenshots/${GH_USER}"
 REPO=$("$SCRIPT_DIR/resolve-github-origin-repo.sh")
 
-mapfile -t PNGS < <(find "$PNG_DIR" -maxdepth 1 -name "*.png" -type f | sort)
+PNGS=()
+while IFS= read -r png; do
+  PNGS+=("$png")
+done < <(find "$PNG_DIR" -maxdepth 1 -name "*.png" -type f | sort)
 if [[ ${#PNGS[@]} -eq 0 ]]; then
   echo "error: no PNGs found in $PNG_DIR" >&2
   exit 1
@@ -80,7 +83,10 @@ if [[ -n "$BODY_FILE" ]]; then
     fi
   done
   if [[ ${#UNREFERENCED[@]} -gt 0 ]]; then
-    mapfile -t SORTED < <(printf '%s\n' "${UNREFERENCED[@]}" | sort)
+    SORTED=()
+    while IFS= read -r name; do
+      SORTED+=("$name")
+    done < <(printf '%s\n' "${UNREFERENCED[@]}" | sort)
     for NAME in "${SORTED[@]}"; do
       COMMENT_BODY+=$'\n\n'"![${NAME}](${IMAGE_URL_MAP[$NAME]})"
     done
