@@ -38,7 +38,7 @@ pre-commit:
       run: just mobile-fix
       stage_fixed: true
 
-# Appends the DCO Signed-off-by trailer the required "DCO Check" enforces.
+# Appends the DCO Signed-off-by trailer used by the upstream contribution flow.
 # `--if-exists doNothing` makes it idempotent and preserves an existing
 # sign-off (including `git commit -s` and a different signer's trailer).
 commit-msg:
