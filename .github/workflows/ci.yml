@@ -98,7 +98,7 @@ jobs:
           scripts/test-branch-source-policy.sh
           deploy/charts/buzz-push-gateway/tests/release-contract.sh
           node scripts/test-ci-gate-contract.mjs
-          node scripts/test-namleh-publish-guards.mjs
+          ruby scripts/test-namleh-publish-guards.rb
 
   dco:
     name: DCO Check
