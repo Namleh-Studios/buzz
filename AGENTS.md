@@ -4,6 +4,32 @@ This guide is for AI agents contributing to the Buzz codebase. It covers
 agent-specific context and conventions. For general contributor info (setup,
 code style, PR process, architecture), see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Namleh Fork Boundary
+
+This checkout is the Namleh Studios fork. `origin` must be
+`Namleh-Studios/buzz`; `block/buzz` is the read-only `upstream` remote. Run
+`scripts/configure-namleh-remotes.sh` after cloning so an accidental
+`git push upstream` fails locally.
+
+All feature branches open pull requests into protected `dev`. A merge to
+`dev` is the staging source and must pass the remote CI gate. Protected `main`
+is the production source; do not open or merge `dev` to `main`, create a
+production release, or deploy production without explicit founder approval.
+The environment-specific staging build and deployment are established by the
+fork-baseline tickets that follow OPS-196; do not represent them as available
+before those tickets pass their stage gate.
+
+Upstream changes are never merged directly. Follow
+[`docs/namleh/UPSTREAM_WORKFLOW.md`](docs/namleh/UPSTREAM_WORKFLOW.md): fetch,
+review the exact commit range, classify every relevant change, create a fresh
+sync branch from `origin/dev`, and open a reviewed PR to `dev`. Preserve the
+Apache-2.0 license, copyright notices, dependency licenses, migrations, and
+protocol compatibility for every accepted port.
+
+Local verification must not start Docker or a local service stack. Use the
+no-infrastructure checks locally; relay/database integration tests run on
+disposable GitHub-hosted CI, and runtime validation uses managed staging.
+
 ---
 
 ## Ecosystem
