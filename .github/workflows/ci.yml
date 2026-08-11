@@ -96,6 +96,7 @@ jobs:
           scripts/test-github-origin-repo.sh
           scripts/test-dco-contract.sh
           scripts/test-branch-source-policy.sh
+          deploy/charts/buzz-push-gateway/tests/release-contract.sh
           node scripts/test-ci-gate-contract.mjs
           node scripts/test-namleh-publish-guards.mjs
 
@@ -120,7 +121,12 @@ jobs:
     name: Branch Source Policy
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
       - name: Require dev as the production source
         env:
           EVENT_NAME: ${{ github.event_name }}

@@ -780,8 +780,8 @@ jobs:
     name: Assemble multi-platform latest.json
     # Only the tag-bound setup path can reach this job.
     if: |
-      always() &&
       github.repository == 'block/buzz' &&
+      always() &&
       needs.setup.result == 'success' &&
       needs.release.result == 'success' &&
       needs.release-macos-x64.result == 'success' &&

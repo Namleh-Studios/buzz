@@ -5,6 +5,11 @@ const jobsStart = workflow.indexOf("\njobs:\n");
 if (jobsStart < 0) throw new Error("jobs section is missing");
 
 const jobs = workflow.slice(jobsStart);
+for (const line of jobs.split("\n")) {
+  if (/^  \S/.test(line) && !/^  [A-Za-z0-9_-]+:\s*$/.test(line)) {
+    throw new Error(`noncanonical job key is not allowed: ${line.trim()}`);
+  }
+}
 const jobIds = [...jobs.matchAll(/^  ([A-Za-z0-9_-]+):\s*$/gm)].map((match) => match[1]);
 const gateStart = jobs.indexOf("\n  ci-gate:\n");
 if (gateStart < 0) throw new Error("ci-gate job is missing");
