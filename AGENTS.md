@@ -4,6 +4,47 @@ This guide is for AI agents contributing to the Buzz codebase. It covers
 agent-specific context and conventions. For general contributor info (setup,
 code style, PR process, architecture), see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Namleh Fork Boundary
+
+This checkout is the Namleh Studios fork. `origin` must be
+`Namleh-Studios/buzz`; `block/buzz` is the read-only `upstream` remote. Run
+`scripts/configure-namleh-remotes.sh` after cloning so an accidental
+`git push upstream` fails locally.
+
+All feature branches open pull requests into protected `dev`. A merge to
+`dev` is the staging source and must pass the remote CI gate. Protected `main`
+is the production source; do not open or merge `dev` to `main`, create a
+production release, or deploy production without explicit founder approval.
+Owner authorization, independent agent review and testing, and green automated
+gates are sufficient for a Namleh pull request; no peer GitHub approval is
+required. This fork rule overrides the upstream maintainer-approval language in
+`CONTRIBUTING.md`.
+The base-controlled `Base Policy Gate` must also pass. Changes under
+`.github/workflows/`, `.github/actions/`, or the gate's protected policy scripts
+require explicit owner authorization for the exact head SHA through the
+`NAMLEH_POLICY_CHANGE_HEAD_SHA` repository variable; clear the variable after
+the approved policy PR merges.
+The environment-specific staging build and deployment are established by the
+fork-baseline tickets that follow OPS-196; do not represent them as available
+before those tickets pass their stage gate.
+
+Upstream changes are never merged directly. Follow
+[`docs/namleh/UPSTREAM_WORKFLOW.md`](docs/namleh/UPSTREAM_WORKFLOW.md): fetch,
+review the exact commit range, classify every relevant change, create a fresh
+sync branch from `origin/dev`, and open an independently agent-reviewed PR to
+`dev`. Preserve the Apache-2.0 license, copyright notices, dependency licenses,
+migrations, and protocol compatibility for every accepted port.
+
+Local verification must not start Docker or a local service stack. Use the
+no-infrastructure checks locally; relay/database integration tests run on
+disposable GitHub-hosted CI, and runtime validation uses managed staging.
+The inherited `just bootstrap`, `just setup`, `just dev`, `just staging`,
+`just production`, `just test`, and `just mobile-dev` recipes are prohibited on
+this workstation because they require Docker or local services. The inherited
+`just ci` command is also not the default local gate because its complete build
+matrix exceeds the available disk. These Namleh rules override later upstream
+setup and testing examples in this file.
+
 ---
 
 ## Ecosystem
@@ -76,27 +117,31 @@ scripts/              # Dev tooling
 
 ## Getting Started
 
+Namleh's Docker-free workstation setup is:
+
 ```bash
 . ./bin/activate-hermit   # activate hermit toolchain (Rust, Node, etc.)
-cp .env.example .env      # configure local environment
-just setup                # install deps, run migrations
-just relay                # start relay at ws://localhost:3000
-just ci                   # run before any PR
+pnpm install --frozen-lockfile
+just hooks
+scripts/test-namleh-fork-contract.sh
 ```
 
-See CONTRIBUTING.md for full setup details and dependency requirements.
+Do not copy `.env`, run migrations, or start the relay for no-infrastructure
+work. See CONTRIBUTING.md only for dependency context; its service-stack setup
+does not override the Namleh workstation boundary above.
 
 ---
 
 ## Quality Gates
 
-Run `just ci` before every PR — it runs `fmt` + `clippy` + desktop lint +
-unit tests + builds. Clippy passing does not mean fmt passes; run both.
+Run only the no-infrastructure checks relevant to the changed files, plus
+`scripts/test-namleh-fork-contract.sh` and `git diff --check`. GitHub-hosted PR
+CI runs the complete formatting, lint, test, integration, and build matrix.
 
-Run `just test` for integration tests if you touched `buzz-relay`,
-`buzz-db`, or `buzz-auth` — these require a running Postgres and Redis.
+Do not run `just test` locally. Changes to `buzz-relay`, `buzz-db`, or
+`buzz-auth` require the hosted integration lanes and managed-staging evidence.
 
-**Pre-commit hooks** are installed automatically by `just setup` and auto-fix
+**Pre-commit hooks** are installed with `just hooks` and auto-fix
 formatting via `stage_fixed`. Pre-commit runs fix variants in parallel (Rust
 fmt, Tauri Rust fmt, desktop biome fix, web biome fix, mobile dart format).
 Auto-fixable issues are fixed and re-staged; unfixable lint issues block the
@@ -104,12 +149,12 @@ commit. **Pre-push hooks** run clippy (workspace + Tauri), desktop TypeScript
 typechecking (`tsc --noEmit`), and fast unit tests in parallel (Rust, desktop
 JS, Tauri Rust, mobile Flutter) — no overlap with pre-commit. Builds are
 CI-only. Run `just fix-all` to auto-fix all formatting in one shot. Run
-`just ci` for the full local gate. Run `just hooks` to
+the full gate on hosted CI. Run `just hooks` to
 re-install hooks after env changes. Before agents run Git or hooks, activate the
 repo's Hermit environment (`. ./bin/activate-hermit`); do not rewrite hook
 commands to compensate for an unconfigured shell `PATH`.
 
-**Commit with `git commit -s`.** The required **DCO Check** fails any PR with a commit missing a `Signed-off-by` trailer, and `just hooks` installs a `commit-msg` hook that adds it to commits you create locally (`git rebase` and `git cherry-pick` still need `--signoff`) — if you build commit commands programmatically, include `-s` every time. To repair a branch that already has unsigned commits: `git rebase --signoff main`, then force-push.
+**Commit with `git commit -s`.** The required **DCO Check** fails any PR with a commit missing a `Signed-off-by` trailer, and `just hooks` installs a `commit-msg` hook that adds it to commits you create locally (`git rebase` and `git cherry-pick` still need `--signoff`) — if you build commit commands programmatically, include `-s` every time. GitHub web commit signoff is required; automated squash merges must still provide a matching `Signed-off-by` trailer explicitly. To repair a branch that already has unsigned commits: `git rebase --signoff main`, then force-push.
 
 Additional rules:
 - No `unsafe` code
@@ -333,9 +378,10 @@ only the current set remains, otherwise reviewers still see the stale images:
 
 ```bash
 # List screenshot comments to find the stale one's id
-gh pr view <pr> --repo block/buzz --json comments \
+REPO=$(scripts/resolve-github-origin-repo.sh)
+gh pr view <pr> --repo "$REPO" --json comments \
   --jq '.comments[] | select(.body | test("pr-<pr>--")) | {id, url}'
-gh api -X DELETE repos/block/buzz/issues/comments/<stale-comment-id>
+gh api -X DELETE "repos/$REPO/issues/comments/<stale-comment-id>"
 ```
 
 Branch cleanup when fully done: `git push origin --delete agent-screenshots/<username>`.
@@ -565,20 +611,15 @@ flutter test
 
 Or from repo root: `just mobile-fmt` (auto-fix), `just mobile-check` (lint + fmt check), `just mobile-test` (tests).
 
-To run the app locally (starts Docker, relay, iOS simulator automatically):
+Do not run `just mobile-dev` on this workstation; it starts Docker and the
+local relay. Use the format, analyze, and test commands above. Interactive
+device validation uses a separately provisioned remote environment after its
+owning staging ticket is complete.
 
-```bash
-just mobile-dev
-```
-
-When run from a git worktree, `just mobile-dev` (and `just
-mobile-build-android`) give the debug build a per-worktree app identifier
-(keyed to the worktree directory name) and a branch-labelled app name via
-`scripts/mobile-worktree-overrides.sh`, so builds from multiple worktrees
-install side by side. Release builds are unaffected. `just mobile-clean`
-removes stale worktree-suffixed installs from simulators/emulators. See
-[mobile/README.md](mobile/README.md) for direct Xcode / Android Studio
-usage.
+The upstream `just mobile-dev` and `just mobile-build-android` recipes retain
+their per-worktree application-identity behavior for other environments, but
+must not be invoked here. Release builds are unaffected. See mobile/README.md
+for architecture and test context, not for overriding this workstation rule.
 
 ### Testing Conventions
 

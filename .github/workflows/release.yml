@@ -654,6 +654,7 @@ jobs:
 
   release-windows:
     name: Release Windows
+    if: github.repository == 'block/buzz'
     runs-on: windows-latest
     needs: setup
     timeout-minutes: 60
@@ -779,6 +780,7 @@ jobs:
     name: Assemble multi-platform latest.json
     # Only the tag-bound setup path can reach this job.
     if: |
+      github.repository == 'block/buzz' &&
       always() &&
       needs.setup.result == 'success' &&
       needs.release.result == 'success' &&
