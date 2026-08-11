@@ -94,48 +94,8 @@ jobs:
         run: |
           scripts/test-namleh-fork-contract.sh
           scripts/test-github-origin-repo.sh
-          scripts/test-dco-contract.sh
-          scripts/test-branch-source-policy.sh
           deploy/charts/buzz-push-gateway/tests/release-contract.sh
-          node scripts/test-base-policy-contract.mjs
-          node scripts/test-ci-gate-contract.mjs
           ruby scripts/test-namleh-publish-guards.rb
-
-  dco:
-    name: DCO Check
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Verify commit sign-offs
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: scripts/check-dco.sh "${BASE_SHA}..HEAD"
-
-  source-policy:
-    name: Branch Source Policy
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          persist-credentials: false
-      - name: Require dev as the production source
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          REPOSITORY: ${{ github.repository }}
-        run: scripts/check-branch-source-policy.sh "$EVENT_NAME" "$BASE_REF" "$HEAD_REF" "$HEAD_REPOSITORY" "$REPOSITORY"
 
   rust-lint:
     name: Rust Lint
@@ -1184,38 +1144,3 @@ jobs:
           LLAMA_STAGE_BACKEND: metal
           LLAMA_STAGE_BUILD_DIR: ${{ github.workspace }}/.cache/mesh-llama/build-stage-abi-metal
           SKIPPY_LLAMA_AUTO_BUILD: "0"
-
-  ci-gate:
-    name: CI Gate
-    if: always()
-    needs:
-      - changes
-      - dco
-      - source-policy
-      - rust-lint
-      - unit-tests
-      - desktop-core
-      - desktop-smoke-e2e
-      - desktop
-      - desktop-e2e-relay
-      - desktop-e2e-integration-shard
-      - desktop-e2e-integration
-      - backend-integration
-      - relay-e2e
-      - web
-      - mobile
-      - security
-      - dead-token-guard
-      - server-cross-compile
-      - windows-rust
-      - desktop-build-macos
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      contents: read
-    steps:
-      - name: Require every applicable job
-        env:
-          JOB_RESULTS: ${{ toJSON(needs) }}
-        run: |
-          jq -e 'all(.[]; .result == "success" or .result == "skipped")' <<<"$JOB_RESULTS"

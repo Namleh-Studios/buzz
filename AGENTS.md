@@ -12,18 +12,13 @@ This checkout is the Namleh Studios fork. `origin` must be
 `git push upstream` fails locally.
 
 All feature branches open pull requests into protected `dev`. A merge to
-`dev` is the staging source and must pass the remote CI gate. Protected `main`
+`dev` is the staging source and must pass applicable hosted CI. Protected `main`
 is the production source; do not open or merge `dev` to `main`, create a
 production release, or deploy production without explicit founder approval.
-Owner authorization, independent agent review and testing, and green automated
-gates are sufficient for a Namleh pull request; no peer GitHub approval is
+Owner authorization, independent agent review and testing, and green applicable
+CI are sufficient for a Namleh pull request; no peer GitHub approval is
 required. This fork rule overrides the upstream maintainer-approval language in
 `CONTRIBUTING.md`.
-The base-controlled `Base Policy Gate` must also pass. Changes under
-`.github/workflows/`, `.github/actions/`, or the gate's protected policy scripts
-require explicit owner authorization for the exact head SHA through the
-`NAMLEH_POLICY_CHANGE_HEAD_SHA` repository variable; clear the variable after
-the approved policy PR merges.
 The environment-specific staging build and deployment are established by the
 fork-baseline tickets that follow OPS-196; do not represent them as available
 before those tickets pass their stage gate.
@@ -154,7 +149,11 @@ re-install hooks after env changes. Before agents run Git or hooks, activate the
 repo's Hermit environment (`. ./bin/activate-hermit`); do not rewrite hook
 commands to compensate for an unconfigured shell `PATH`.
 
-**Commit with `git commit -s`.** The required **DCO Check** fails any PR with a commit missing a `Signed-off-by` trailer, and `just hooks` installs a `commit-msg` hook that adds it to commits you create locally (`git rebase` and `git cherry-pick` still need `--signoff`) — if you build commit commands programmatically, include `-s` every time. GitHub web commit signoff is required; automated squash merges must still provide a matching `Signed-off-by` trailer explicitly. To repair a branch that already has unsigned commits: `git rebase --signoff main`, then force-push.
+Namleh PRs do not enforce a separate DCO status check. The inherited commit
+hook still adds sign-offs so commits remain compatible with upstream; leave it
+installed. Preserve upstream authorship with `git cherry-pick -x`, and keep the
+sign-off when preparing a contribution for an upstream project that requires
+it.
 
 Additional rules:
 - No `unsafe` code

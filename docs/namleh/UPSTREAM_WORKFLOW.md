@@ -33,31 +33,25 @@ requires explicit founder approval. OPS-196 establishes these source and
 approval boundaries; later fork-baseline tickets establish and prove the
 independent staging build, deployment, and production release wiring.
 
-GitHub enforces the source contract:
+The repository follows the same lightweight PR contract as other Namleh
+projects:
 
-- `dev` and `main` require GitHub Actions-owned `Base Policy Gate`, `CI Gate`,
-  and `DCO Check` results, a pull request, resolved conversations, linear
+- `dev` and `main` require a pull request, resolved conversations, linear
   history, and administrator enforcement; branch deletion and force push are
-  disabled.
+  disabled. Applicable CI must be green before Codex merges, but Buzz does not
+  add custom required-check aggregation, DCO, or base-policy workflows.
   The solo-founder workflow does not require a peer approval in GitHub. Owner
-  authorization, independent agent review and testing, and the automated gates
+  authorization, independent agent review and testing, and hosted CI
   are the review contract. GitHub Actions cannot approve pull requests.
-- `Base Policy Gate` runs through `pull_request_target` from the protected base
-  workflow and policy script on the default `dev` branch, checks DCO and the `dev`-to-`main` source route without executing PR
-  code, and rejects changes to workflow/action definitions or its protected
-  policy scripts unless `NAMLEH_POLICY_CHANGE_HEAD_SHA` matches the exact PR
-  head. A PR cannot replace this base-supplied failure with a same-named check;
-  duplicate required check names leave GitHub's result ambiguous and blocked.
 - The `staging` environment accepts only `dev`.
 - The `production` environment accepts only `main` and requires Steven's
   explicit approval. Steven may approve a deployment he requested because he
   is the sole founder in this workflow; administrators cannot bypass the
   environment gate.
-- Pull requests to `main` must come from `dev`; a checked-in source-policy job
-  enforces the staging-to-production route.
+- Pull requests to `main` must come from `dev`; this remains an owner-controlled
+  promotion step rather than a custom CI policy job.
 - Squash is the only enabled merge method, and merged feature branches are
-  deleted automatically. GitHub web commit signoff is required, and automated
-  squash merges provide an explicit matching `Signed-off-by` trailer.
+  deleted automatically.
 
 These policies do not themselves deploy or package an application. A workflow
 must explicitly reference the correct GitHub environment after the owning
@@ -65,17 +59,6 @@ environment ticket establishes that build or deployment.
 Inherited upstream publication jobs are fork-gated to `block/buzz`, so enabling
 them in the Namleh fork cannot publish a relay image, Helm chart, Sprig image,
 tag, or release around the Namleh environment contract.
-
-Policy files are changed only with explicit owner authorization for the exact
-commit under review:
-
-```bash
-HEAD_SHA=$(git rev-parse HEAD)
-gh variable set NAMLEH_POLICY_CHANGE_HEAD_SHA --repo Namleh-Studios/buzz --body "$HEAD_SHA"
-gh run rerun <base-policy-run-id> --repo Namleh-Studios/buzz
-# After the approved policy PR merges:
-gh variable delete NAMLEH_POLICY_CHANGE_HEAD_SHA --repo Namleh-Studios/buzz
-```
 
 ## Selective upstream sync
 
@@ -99,9 +82,9 @@ commit as:
 - product, UI, or architecture decision requiring explicit approval; or
 - out of scope.
 
-Port only the approved commits, using `git cherry-pick -x --signoff` when a
-commit can be accepted intact and a bounded, signed-off manual adaptation
-otherwise. Do not merge draft, blocked, experimental, marketplace, remotely
+Port only the approved commits, using `git cherry-pick -x` when a commit can be
+accepted intact and a bounded manual adaptation otherwise. Do not merge draft,
+blocked, experimental, marketplace, remotely
 supplied UI, or generic app-host branches wholesale.
 
 Open the result as a pull request to `dev` using the upstream-sync template:
