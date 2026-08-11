@@ -7,13 +7,16 @@ import {
   validateApiCompleteness,
   validateDco,
   validateDefaultBranch,
+  validateEventMatchesPullRequest,
   validatePolicyChanges,
   validateSource,
+  validateStablePullRequestSnapshot,
 } from "./check-base-policy.mjs";
 
 const workflow = readFileSync(new URL("../.github/workflows/base-policy.yml", import.meta.url), "utf8");
 assert.match(workflow, /^\s*pull_request_target:\s*$/m);
-assert.match(workflow, /ref: \$\{\{ github\.event\.repository\.default_branch \}\}/);
+assert.match(workflow, /types: \[opened, synchronize, reopened, ready_for_review, edited\]/);
+assert.match(workflow, /ref: \$\{\{ github\.workflow_sha \}\}/);
 assert.match(workflow, /persist-credentials: false/);
 assert.match(workflow, /run: node scripts\/check-base-policy\.mjs/);
 assert.doesNotMatch(workflow, /pull_request\.head\.sha[^\n]*ref:/);
@@ -30,6 +33,54 @@ assert.equal(isLockedPolicyPath("desktop/src/main.tsx"), false);
 
 validateDefaultBranch("dev");
 assert.throws(() => validateDefaultBranch("main"), /default branch must be dev/);
+
+const eventPullRequest = {
+  base: { ref: "dev", sha: "base" },
+  head: {
+    ref: "feature",
+    sha: "abc",
+    repo: { full_name: "Namleh-Studios/buzz" },
+  },
+};
+validateEventMatchesPullRequest({
+  pullRequest: eventPullRequest,
+  baseRef: "dev",
+  baseSha: "base",
+  headRef: "feature",
+  headRepository: "Namleh-Studios/buzz",
+  headSha: "abc",
+});
+for (const mismatch of [
+  { baseRef: "main", baseSha: "base", headRef: "feature", headRepository: "Namleh-Studios/buzz", headSha: "abc" },
+  { baseRef: "dev", baseSha: "other", headRef: "feature", headRepository: "Namleh-Studios/buzz", headSha: "abc" },
+  { baseRef: "dev", baseSha: "base", headRef: "renamed", headRepository: "Namleh-Studios/buzz", headSha: "abc" },
+  { baseRef: "dev", baseSha: "base", headRef: "feature", headRepository: "external/buzz", headSha: "abc" },
+  { baseRef: "dev", baseSha: "base", headRef: "feature", headRepository: "Namleh-Studios/buzz", headSha: "new" },
+]) {
+  assert.throws(
+    () => validateEventMatchesPullRequest({ pullRequest: eventPullRequest, ...mismatch }),
+    /fresh event/,
+  );
+}
+
+validateStablePullRequestSnapshot({ before: eventPullRequest, after: structuredClone(eventPullRequest) });
+for (const after of [
+  { ...eventPullRequest, base: { ref: "main" } },
+  { ...eventPullRequest, base: { ...eventPullRequest.base, sha: "other" } },
+  { ...eventPullRequest, head: { ...eventPullRequest.head, ref: "renamed" } },
+  {
+    ...eventPullRequest,
+    head: { ...eventPullRequest.head, repo: { full_name: "external/buzz" } },
+  },
+  { ...eventPullRequest, head: { ...eventPullRequest.head, sha: "new" } },
+  { ...eventPullRequest, commits: 2 },
+  { ...eventPullRequest, changed_files: 2 },
+]) {
+  assert.throws(
+    () => validateStablePullRequestSnapshot({ before: eventPullRequest, after }),
+    /changed while policy data was loading/,
+  );
+}
 
 validateSource({
   baseRef: "dev",

@@ -33,6 +33,42 @@ export function validateDefaultBranch(defaultBranch) {
   if (defaultBranch !== "dev") throw new Error(`repository default branch must be dev; received ${defaultBranch}`);
 }
 
+export function validateEventMatchesPullRequest({
+  pullRequest,
+  baseRef,
+  baseSha,
+  headRef,
+  headRepository,
+  headSha,
+}) {
+  const actualHeadRepository = pullRequest.head?.repo?.full_name;
+  if (
+    pullRequest.base?.ref !== baseRef ||
+    pullRequest.base?.sha !== baseSha ||
+    pullRequest.head?.ref !== headRef ||
+    actualHeadRepository !== headRepository ||
+    pullRequest.head?.sha !== headSha
+  ) {
+    throw new Error("pull request changed after this policy event; a fresh event must validate the current state");
+  }
+}
+
+export function validateStablePullRequestSnapshot({ before, after }) {
+  const fields = [
+    ["base ref", before.base?.ref, after.base?.ref],
+    ["base SHA", before.base?.sha, after.base?.sha],
+    ["head ref", before.head?.ref, after.head?.ref],
+    ["head repository", before.head?.repo?.full_name, after.head?.repo?.full_name],
+    ["head SHA", before.head?.sha, after.head?.sha],
+    ["commit count", before.commits, after.commits],
+    ["changed file count", before.changed_files, after.changed_files],
+  ];
+  const changed = fields.filter(([, first, second]) => first !== second).map(([name]) => name);
+  if (changed.length > 0) {
+    throw new Error(`pull request changed while policy data was loading: ${changed.join(", ")}`);
+  }
+}
+
 export function signoffEmails(message) {
   const trailers = execFileSync("git", ["interpret-trailers", "--parse"], {
     input: message,
@@ -146,6 +182,7 @@ async function main() {
     "REPOSITORY",
     "PR_NUMBER",
     "BASE_REF",
+    "BASE_SHA",
     "HEAD_REF",
     "HEAD_REPOSITORY",
     "HEAD_SHA",
@@ -164,12 +201,31 @@ async function main() {
   });
 
   const root = `/repos/${env.REPOSITORY}/pulls/${env.PR_NUMBER}`;
-  const [pullRequest, commits, files] = await Promise.all([
-    githubJson(root, env.GITHUB_TOKEN),
+  const pullRequestBefore = await githubJson(root, env.GITHUB_TOKEN);
+  validateEventMatchesPullRequest({
+    pullRequest: pullRequestBefore,
+    baseRef: env.BASE_REF,
+    baseSha: env.BASE_SHA,
+    headRef: env.HEAD_REF,
+    headRepository: env.HEAD_REPOSITORY,
+    headSha: env.HEAD_SHA,
+  });
+
+  const [commits, files] = await Promise.all([
     listGithub(`${root}/commits`, env.GITHUB_TOKEN),
     listGithub(`${root}/files`, env.GITHUB_TOKEN),
   ]);
-  validateApiCompleteness({ pullRequest, commits, files });
+  const pullRequestAfter = await githubJson(root, env.GITHUB_TOKEN);
+  validateEventMatchesPullRequest({
+    pullRequest: pullRequestAfter,
+    baseRef: env.BASE_REF,
+    baseSha: env.BASE_SHA,
+    headRef: env.HEAD_REF,
+    headRepository: env.HEAD_REPOSITORY,
+    headSha: env.HEAD_SHA,
+  });
+  validateStablePullRequestSnapshot({ before: pullRequestBefore, after: pullRequestAfter });
+  validateApiCompleteness({ pullRequest: pullRequestAfter, commits, files });
   validateDco(commits);
   validatePolicyChanges({
     paths: policyPathsFromFiles(files),
