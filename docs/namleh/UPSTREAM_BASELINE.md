@@ -21,7 +21,7 @@ Upstream commit evidence:
 
 ## Upstream CI evidence
 
-GitHub reported the upstream commit's required checks successful, including
+GitHub reported the upstream commit's check suite successful, including
 Rust lint and unit tests, backend integration, relay E2E, desktop core and
 build, desktop smoke and integration shards, web, mobile, and security.
 
@@ -31,7 +31,7 @@ The untouched checkout was verified with the repository Hermit toolchain:
 
 | Check | Result | Notes |
 |---|---|---|
-| `just ci` | Passed by completed component gates | Formatting, clippy, desktop lint and 4,584 JS tests, desktop and web builds, Tauri check, and mobile analyze passed. The first combined run exhausted local disk during the Tauri test link step. After removing 6.1 GiB of disposable root build output, the remaining official recipes passed independently. |
+| `just ci` | Incomplete locally: disk exhaustion | Formatting, clippy, desktop lint and 4,584 JS tests, desktop and web builds, Tauri check, and mobile analyze completed before the combined command failed during the Tauri test link step. After removing 6.1 GiB of disposable root build output, the remaining official recipes below passed independently. Hosted PR CI supplies the complete matrix. |
 | `just desktop-tauri-test` | Passed | 2,383 desktop library tests passed; 14 OS-keychain tests ignored by their upstream contract. Desktop terminal suites also passed; the native performance gate remained intentionally ignored. |
 | `just web-build` | Passed | Production web build completed with the upstream chunk-size warning. |
 | `just mobile-test` | Passed | 1,261 Flutter tests passed. |
@@ -54,11 +54,12 @@ test. Existing upstream application data remained present under
 update, remove, or modify the released application. OPS-197 owns the independent
 Namleh application identity and the executable side-by-side proof.
 
-## Compatibility surface for later stage gates
+## Compatibility surface requiring evidence
 
-The fork baseline covers the existing signup/sign-in, communities, channels,
-chat, threads, reactions, search, media, drafts, reconnect/backfill, agents,
-Canvas/Doc, Git, Huddles, settings, and deep-link behavior. OPS-196 changes no
-runtime code. The fork-baseline stage gate must rerun focused automated,
-two-user, accessibility, persistence, and visual evidence after the independent
-Namleh identity and environment wiring land.
+OPS-196 changes no runtime code. The automated upstream check suite supplies
+the broad regression baseline, while the local mock click-through currently
+covers Inbox, channel navigation/chat, search, and Settings/Appearance. The
+remaining required surfaces—signup/sign-in, communities, threads, reactions,
+media, drafts, reconnect/backfill, agents, Canvas/Doc, Git, Huddles, and deep
+links—still require an explicit test-or-smoke evidence mapping before this
+ticket can be completed. No uncovered surface is represented as passed.

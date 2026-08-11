@@ -29,6 +29,12 @@ protocol compatibility for every accepted port.
 Local verification must not start Docker or a local service stack. Use the
 no-infrastructure checks locally; relay/database integration tests run on
 disposable GitHub-hosted CI, and runtime validation uses managed staging.
+The inherited `just bootstrap`, `just setup`, `just dev`, `just staging`,
+`just production`, `just test`, and `just mobile-dev` recipes are prohibited on
+this workstation because they require Docker or local services. The inherited
+`just ci` command is also not the default local gate because its complete build
+matrix exceeds the available disk. These Namleh rules override later upstream
+setup and testing examples in this file.
 
 ---
 
@@ -102,27 +108,31 @@ scripts/              # Dev tooling
 
 ## Getting Started
 
+Namleh's Docker-free workstation setup is:
+
 ```bash
 . ./bin/activate-hermit   # activate hermit toolchain (Rust, Node, etc.)
-cp .env.example .env      # configure local environment
-just setup                # install deps, run migrations
-just relay                # start relay at ws://localhost:3000
-just ci                   # run before any PR
+pnpm install --frozen-lockfile
+just hooks
+scripts/test-namleh-fork-contract.sh
 ```
 
-See CONTRIBUTING.md for full setup details and dependency requirements.
+Do not copy `.env`, run migrations, or start the relay for no-infrastructure
+work. See CONTRIBUTING.md only for dependency context; its service-stack setup
+does not override the Namleh workstation boundary above.
 
 ---
 
 ## Quality Gates
 
-Run `just ci` before every PR — it runs `fmt` + `clippy` + desktop lint +
-unit tests + builds. Clippy passing does not mean fmt passes; run both.
+Run only the no-infrastructure checks relevant to the changed files, plus
+`scripts/test-namleh-fork-contract.sh` and `git diff --check`. GitHub-hosted PR
+CI runs the complete formatting, lint, test, integration, and build matrix.
 
-Run `just test` for integration tests if you touched `buzz-relay`,
-`buzz-db`, or `buzz-auth` — these require a running Postgres and Redis.
+Do not run `just test` locally. Changes to `buzz-relay`, `buzz-db`, or
+`buzz-auth` require the hosted integration lanes and managed-staging evidence.
 
-**Pre-commit hooks** are installed automatically by `just setup` and auto-fix
+**Pre-commit hooks** are installed with `just hooks` and auto-fix
 formatting via `stage_fixed`. Pre-commit runs fix variants in parallel (Rust
 fmt, Tauri Rust fmt, desktop biome fix, web biome fix, mobile dart format).
 Auto-fixable issues are fixed and re-staged; unfixable lint issues block the
@@ -130,7 +140,7 @@ commit. **Pre-push hooks** run clippy (workspace + Tauri), desktop TypeScript
 typechecking (`tsc --noEmit`), and fast unit tests in parallel (Rust, desktop
 JS, Tauri Rust, mobile Flutter) — no overlap with pre-commit. Builds are
 CI-only. Run `just fix-all` to auto-fix all formatting in one shot. Run
-`just ci` for the full local gate. Run `just hooks` to
+the full gate on hosted CI. Run `just hooks` to
 re-install hooks after env changes. Before agents run Git or hooks, activate the
 repo's Hermit environment (`. ./bin/activate-hermit`); do not rewrite hook
 commands to compensate for an unconfigured shell `PATH`.
@@ -591,20 +601,15 @@ flutter test
 
 Or from repo root: `just mobile-fmt` (auto-fix), `just mobile-check` (lint + fmt check), `just mobile-test` (tests).
 
-To run the app locally (starts Docker, relay, iOS simulator automatically):
+Do not run `just mobile-dev` on this workstation; it starts Docker and the
+local relay. Use the format, analyze, and test commands above. Interactive
+device validation uses a separately provisioned remote environment after its
+owning staging ticket is complete.
 
-```bash
-just mobile-dev
-```
-
-When run from a git worktree, `just mobile-dev` (and `just
-mobile-build-android`) give the debug build a per-worktree app identifier
-(keyed to the worktree directory name) and a branch-labelled app name via
-`scripts/mobile-worktree-overrides.sh`, so builds from multiple worktrees
-install side by side. Release builds are unaffected. `just mobile-clean`
-removes stale worktree-suffixed installs from simulators/emulators. See
-[mobile/README.md](mobile/README.md) for direct Xcode / Android Studio
-usage.
+The upstream `just mobile-dev` and `just mobile-build-android` recipes retain
+their per-worktree application-identity behavior for other environments, but
+must not be invoked here. Release builds are unaffected. See mobile/README.md
+for architecture and test context, not for overriding this workstation rule.
 
 ### Testing Conventions
 

@@ -35,19 +35,26 @@ independent staging build, deployment, and production release wiring.
 
 GitHub enforces the source contract:
 
-- `dev` and `main` require the aggregate `CI Gate`, one approving review from
-  someone other than the last pusher, resolved conversations, linear history,
-  and administrator enforcement; branch deletion and force push are disabled.
+- `dev` and `main` require GitHub Actions-owned `CI Gate` and `DCO Check`
+  results, one CODEOWNER approval from someone other than the last pusher,
+  resolved conversations, linear history, and administrator enforcement;
+  branch deletion and force push are disabled. GitHub Actions cannot approve
+  pull requests.
 - The `staging` environment accepts only `dev`.
 - The `production` environment accepts only `main` and requires approval from
-  Steven or Tim. Environment approval allows either founder to approve their
-  own deployment; it does not impose a two-person release gate.
+  Steven or Tim. The deployment requester cannot self-approve, and
+  administrators cannot bypass the environment gate.
+- Pull requests to `main` must come from `dev`; a checked-in source-policy job
+  enforces the staging-to-production route.
 - Squash is the only enabled merge method, and merged feature branches are
   deleted automatically.
 
 These policies do not themselves deploy or package an application. A workflow
 must explicitly reference the correct GitHub environment after the owning
 environment ticket establishes that build or deployment.
+Inherited upstream publication jobs are fork-gated to `block/buzz`, so enabling
+them in the Namleh fork cannot publish a relay image, Helm chart, Sprig image,
+tag, or release around the Namleh environment contract.
 
 ## Selective upstream sync
 

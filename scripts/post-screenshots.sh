@@ -9,6 +9,7 @@ fi
 PR="$1"
 PNG_DIR="$2"
 BODY_FILE="${3:-}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! [[ "$PR" =~ ^[0-9]+$ ]]; then
   echo "error: PR number must be a positive integer" >&2
@@ -17,7 +18,7 @@ fi
 
 GH_USER=$(gh api user --jq .login)
 BRANCH="agent-screenshots/${GH_USER}"
-REPO="block/buzz"
+REPO=$("$SCRIPT_DIR/resolve-github-origin-repo.sh")
 
 mapfile -t PNGS < <(find "$PNG_DIR" -maxdepth 1 -name "*.png" -type f | sort)
 if [[ ${#PNGS[@]} -eq 0 ]]; then
@@ -66,7 +67,6 @@ for i in "${!PNGS[@]}"; do
 done
 
 if [[ -n "$BODY_FILE" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   "$SCRIPT_DIR/check-pr-image-urls.sh" "$BODY_FILE"
   COMMENT_BODY="$(cat "$BODY_FILE")"
   UNREFERENCED=()
@@ -80,7 +80,7 @@ if [[ -n "$BODY_FILE" ]]; then
     fi
   done
   if [[ ${#UNREFERENCED[@]} -gt 0 ]]; then
-    IFS=$'\n' SORTED=($(printf '%s\n' "${UNREFERENCED[@]}" | sort)); unset IFS
+    mapfile -t SORTED < <(printf '%s\n' "${UNREFERENCED[@]}" | sort)
     for NAME in "${SORTED[@]}"; do
       COMMENT_BODY+=$'\n\n'"![${NAME}](${IMAGE_URL_MAP[$NAME]})"
     done

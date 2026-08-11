@@ -91,7 +91,44 @@ jobs:
       - name: File size ratchet unit tests
         run: node --test scripts/check-file-sizes-core.test.mjs
       - name: Namleh fork workflow contract
-        run: scripts/test-namleh-fork-contract.sh
+        run: |
+          scripts/test-namleh-fork-contract.sh
+          scripts/test-github-origin-repo.sh
+          scripts/test-dco-contract.sh
+          node scripts/test-ci-gate-contract.mjs
+
+  dco:
+    name: DCO Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify commit sign-offs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: scripts/check-dco.sh "${BASE_SHA}..HEAD"
+
+  source-policy:
+    name: Branch Source Policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require dev as the production source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == "pull_request" && "$BASE_REF" == "main" && "$HEAD_REF" != "dev" ]]; then
+            echo "Pull requests to main must come from dev; found: ${HEAD_REF:-missing}" >&2
+            exit 1
+          fi
 
   rust-lint:
     name: Rust Lint
@@ -1146,6 +1183,8 @@ jobs:
     if: always()
     needs:
       - changes
+      - dco
+      - source-policy
       - rust-lint
       - unit-tests
       - desktop-core
