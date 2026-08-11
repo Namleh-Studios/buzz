@@ -95,6 +95,7 @@ jobs:
           scripts/test-namleh-fork-contract.sh
           scripts/test-github-origin-repo.sh
           scripts/test-dco-contract.sh
+          scripts/test-branch-source-policy.sh
           node scripts/test-ci-gate-contract.mjs
           node scripts/test-namleh-publish-guards.mjs
 
@@ -125,11 +126,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [[ "$EVENT_NAME" == "pull_request" && "$BASE_REF" == "main" && "$HEAD_REF" != "dev" ]]; then
-            echo "Pull requests to main must come from dev; found: ${HEAD_REF:-missing}" >&2
-            exit 1
-          fi
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: scripts/check-branch-source-policy.sh "$EVENT_NAME" "$BASE_REF" "$HEAD_REF" "$HEAD_REPOSITORY" "$REPOSITORY"
 
   rust-lint:
     name: Rust Lint

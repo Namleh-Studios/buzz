@@ -21,6 +21,11 @@ const guardedJobs = {
   ".github/workflows/sprig.yml": ["publish", "publish-tag"],
 };
 
+const forkExclusiveJobs = {
+  ".github/workflows/docker.yml": ["build", "push-gateway-build"],
+  ".github/workflows/sprig-image.yml": ["build"],
+};
+
 for (const [file, jobs] of Object.entries(guardedJobs)) {
   const workflow = readFileSync(resolve(root, file), "utf8");
   for (const job of jobs) {
@@ -31,6 +36,20 @@ for (const [file, jobs] of Object.entries(guardedJobs)) {
     const block = next < 0 ? remainder : remainder.slice(0, next);
     if (!block.includes("github.repository == 'block/buzz'")) {
       throw new Error(`${file}: ${job} is not fork-gated to block/buzz`);
+    }
+  }
+}
+
+for (const [file, jobs] of Object.entries(forkExclusiveJobs)) {
+  const workflow = readFileSync(resolve(root, file), "utf8");
+  for (const job of jobs) {
+    const start = workflow.search(new RegExp(`^  ${job}:\\s*$`, "m"));
+    const remainder = workflow.slice(start + 1);
+    const next = remainder.search(/^  [A-Za-z0-9_-]+:\s*$/m);
+    const block = next < 0 ? remainder : remainder.slice(0, next);
+    const condition = block.match(/^    if: (.+)$/m)?.[1];
+    if (condition !== "github.repository == 'block/buzz'") {
+      throw new Error(`${file}: ${job} must be disabled entirely outside block/buzz`);
     }
   }
 }

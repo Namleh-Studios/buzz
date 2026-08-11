@@ -369,9 +369,10 @@ only the current set remains, otherwise reviewers still see the stale images:
 
 ```bash
 # List screenshot comments to find the stale one's id
-gh pr view <pr> --repo block/buzz --json comments \
+REPO=$(scripts/resolve-github-origin-repo.sh)
+gh pr view <pr> --repo "$REPO" --json comments \
   --jq '.comments[] | select(.body | test("pr-<pr>--")) | {id, url}'
-gh api -X DELETE repos/block/buzz/issues/comments/<stale-comment-id>
+gh api -X DELETE "repos/$REPO/issues/comments/<stale-comment-id>"
 ```
 
 Branch cleanup when fully done: `git push origin --delete agent-screenshots/<username>`.
