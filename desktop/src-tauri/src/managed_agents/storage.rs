@@ -1,5 +1,6 @@
+#[cfg(test)]
+use std::collections::HashMap;
 use std::{
-    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::{Read as _, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -139,11 +140,13 @@ trait KeyStore {
     /// Read the entire blob as a map without any side effects.
     /// `Ok(None)` when no blob exists yet; `Err` only on backend failure.
     /// Callers must not call `migrate_legacy_key` — this is a read-only view.
+    #[cfg(test)]
     fn load_all_readonly(&self) -> Result<Option<HashMap<String, String>>, String>;
     /// Write `value` and read it back to confirm before the caller strips the
     /// inline copy.
     fn write_and_verify(&self, name: &str, value: &str) -> Result<(), String>;
     /// Insert all entries from `entries` in a single blob mutation.
+    #[cfg(test)]
     fn store_all(&self, entries: &HashMap<String, String>) -> Result<(), String>;
 }
 
@@ -154,6 +157,7 @@ impl KeyStore for SecretStore {
     fn load(&self, name: &str) -> Result<Option<String>, String> {
         SecretStore::load(self, name)
     }
+    #[cfg(test)]
     fn load_all_readonly(&self) -> Result<Option<HashMap<String, String>>, String> {
         SecretStore::load_all_readonly(self)
     }
@@ -164,6 +168,7 @@ impl KeyStore for SecretStore {
             _ => Err("keyring read-back verify failed".to_string()),
         }
     }
+    #[cfg(test)]
     fn store_all(&self, entries: &HashMap<String, String>) -> Result<(), String> {
         SecretStore::store_all(self, entries)
     }
@@ -443,54 +448,11 @@ fn persist_agent_keys_with(store: &impl KeyStore, records: &mut [ManagedAgentRec
     }
 }
 
-/// One-time migration of agent keys from the production keyring service
-/// (`"buzz-desktop"`) to the dev service (`"buzz-desktop-dev"`). Only runs
-/// in debug builds — release builds never touch `"buzz-desktop"` from this
-/// path.
-///
-/// Idempotent: skips any key that already exists in the dev service so
-/// repeated boots after migration are no-ops. Leaves the production keyring
-/// untouched — a dev build and a prod install can coexist without sharing
-/// keys after this migration.
-///
-/// Call this at boot before `hydrate_keys` runs (i.e. before
-/// `load_managed_agents` is called) so agents find their keys on first boot
-/// after the service-name change.
-#[cfg(debug_assertions)]
-pub fn migrate_agent_keys_to_dev_service(app: &tauri::AppHandle) {
-    if !cfg!(feature = "system-keyring") || keyring_service() != "buzz-desktop-dev" {
-        return;
-    }
-
-    // Read the JSON store for pubkeys only — we want every instance
-    // record without running hydrate_keys (which would try the dev
-    // keyring that is empty, and log noisy "has no key" warnings).
-    let records = match load_agent_store(app) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("buzz-desktop: keyring-dev-migration: cannot read agent store: {e}");
-            return;
-        }
-    };
-
-    let pubkeys: Vec<String> = records
-        .into_iter()
-        .filter(|r| !r.pubkey.is_empty())
-        .map(|r| r.pubkey)
-        .collect();
-    // A fresh non-singleton store for the prod service — its own empty
-    // cache so reads go to the OS keyring without polluting the dev
-    // singleton's cache.
-    let prod_store = crate::secret_store::SecretStore::keyring("buzz-desktop");
-    let dev_store = crate::secret_store::SecretStore::shared(keyring_service());
-    copy_agent_keys_between_stores(&pubkeys, &prod_store, dev_store);
-}
-
 /// Marker key stored inside the dev blob after a successful agent-key migration.
 /// Its presence means all agent keys that existed in the prod service at
 /// migration time have been copied; subsequent dev boots skip the migration
 /// entirely (no prod keyring access).
-#[cfg(debug_assertions)]
+#[cfg(test)]
 const DEV_MIGRATION_MARKER: &str = "_dev_migration_v1";
 
 /// Testable core of [`migrate_agent_keys_to_dev_service`]: copy `agent:<pubkey>`
@@ -511,7 +473,7 @@ const DEV_MIGRATION_MARKER: &str = "_dev_migration_v1";
 /// may have rotated their key in the dev service after initial migration).
 /// New agents (pubkey not in `src`) are silently skipped — they will mint a
 /// fresh key on their next onboarding run.
-#[cfg(debug_assertions)]
+#[cfg(test)]
 fn copy_agent_keys_between_stores(pubkeys: &[String], src: &impl KeyStore, dst: &impl KeyStore) {
     // One read of the dev blob. If the migration-complete marker is present,
     // all prior agent keys are already in the dev service — skip entirely.

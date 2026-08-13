@@ -19,6 +19,7 @@ import { Toaster } from "@/shared/ui/sonner";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { recoverLocalStorageQuotaOnStartup } from "@/shared/lib/localStorageQuota";
 import { startLocalStorageSweep } from "@/shared/lib/localStorageSweep";
+import { NAMLEH_APP_ENVIRONMENT } from "@/shared/appIdentity";
 
 type E2eWindow = Window & {
   __BUZZ_E2E__?: unknown;
@@ -28,6 +29,18 @@ const E2E_DEFAULT_PUBKEY = "deadbeef".repeat(8);
 const E2E_COMMUNITY_ID = "e2e-default-community";
 const ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX = "buzz-onboarding-complete.v1:";
 const DEV_STATE_RESET_PARAM = "resetDevState";
+
+function StagingIndicator() {
+  if (NAMLEH_APP_ENVIRONMENT !== "staging") return null;
+  return (
+    <div
+      className="pointer-events-none fixed top-2 left-1/2 z-[100] -translate-x-1/2 rounded-full border border-black/25 bg-warning px-3 py-1 font-semibold text-black text-xs shadow-md"
+      data-testid="staging-indicator"
+    >
+      STAGING
+    </div>
+  );
+}
 
 function resetDevWebviewStateFromUrl() {
   if (!import.meta.env.DEV) {
@@ -91,6 +104,7 @@ function renderApp() {
                   <PoofBurstProvider>
                     <UpdaterProvider>
                       <App />
+                      <StagingIndicator />
                       <NostrBindConsentDialog />
                     </UpdaterProvider>
                     <Toaster />

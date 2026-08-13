@@ -7,11 +7,39 @@ include!("src/managed_agents/reserved_env_keys.rs");
 
 use base64::Engine as _;
 
+fn validate_namleh_updater_endpoint(environment: &str, endpoint: &str) {
+    let parsed = url::Url::parse(endpoint)
+        .unwrap_or_else(|error| panic!("invalid Namleh updater endpoint: {error}"));
+    let (namespace, channel) = match environment {
+        "staging" => ("staging", "namleh-buzz-staging"),
+        "production" => ("production", "namleh-buzz-production"),
+        _ => panic!("development builds must not enable the updater"),
+    };
+    let expected_path = format!("/{namespace}/{channel}/latest.json");
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some("updates.namlehstudios.com")
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.path() != expected_path
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        panic!(
+            "{environment} updater endpoint must equal https://updates.namlehstudios.com{expected_path}"
+        );
+    }
+}
+
 fn main() {
+    println!("cargo:rerun-if-env-changed=NAMLEH_APP_ENV");
     println!("cargo:rerun-if-env-changed=BUZZ_RELAY_URL");
     println!("cargo:rerun-if-env-changed=BUZZ_RELAY_HTTP");
     println!("cargo:rerun-if-env-changed=BUZZ_UPDATER_PUBLIC_KEY");
     println!("cargo:rerun-if-env-changed=BUZZ_UPDATER_ENDPOINT");
+    println!("cargo:rerun-if-env-changed=NAMLEH_STAGING_UPDATER_PUBLIC_KEY");
+    println!("cargo:rerun-if-env-changed=NAMLEH_STAGING_UPDATER_ENDPOINT");
+    println!("cargo:rerun-if-env-changed=NAMLEH_PRODUCTION_UPDATER_PUBLIC_KEY");
+    println!("cargo:rerun-if-env-changed=NAMLEH_PRODUCTION_UPDATER_ENDPOINT");
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_BUZZ_AGENT_PROVIDER");
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_BUZZ_AGENT_MODEL");
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_AGENT_ENV");
@@ -19,6 +47,18 @@ fn main() {
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_AGENT_ACCESS_OWNER_ONLY");
     println!("cargo:rerun-if-env-changed=BUZZ_BUILD_AUTO_CONNECT_DEFAULT_RELAY");
     println!("cargo:rustc-check-cfg=cfg(buzz_updater_enabled)");
+
+    let app_environment =
+        std::env::var("NAMLEH_APP_ENV").unwrap_or_else(|_| "development".to_string());
+    if !matches!(
+        app_environment.as_str(),
+        "development" | "staging" | "production"
+    ) {
+        panic!(
+            "NAMLEH_APP_ENV must be development, staging, or production; got {app_environment:?}"
+        );
+    }
+    println!("cargo:rustc-env=NAMLEH_DESKTOP_APP_ENV={app_environment}");
 
     // Explicit owner-only agent-access capability. Release packaging sets this
     // presence-only marker; OSS/custom builds leave agent access configurable.
@@ -113,7 +153,40 @@ fn main() {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    if updater_public_key.is_some() && updater_endpoint.is_some() {
+    if app_environment == "development" {
+        if updater_public_key.is_some() || updater_endpoint.is_some() {
+            panic!("development builds must not enable the updater");
+        }
+    } else {
+        let (scoped_public_key_name, scoped_endpoint_name) = match app_environment.as_str() {
+            "staging" => (
+                "NAMLEH_STAGING_UPDATER_PUBLIC_KEY",
+                "NAMLEH_STAGING_UPDATER_ENDPOINT",
+            ),
+            "production" => (
+                "NAMLEH_PRODUCTION_UPDATER_PUBLIC_KEY",
+                "NAMLEH_PRODUCTION_UPDATER_ENDPOINT",
+            ),
+            _ => unreachable!(),
+        };
+        let scoped_public_key = std::env::var(scoped_public_key_name)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| panic!("missing {scoped_public_key_name}"));
+        let scoped_endpoint = std::env::var(scoped_endpoint_name)
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| panic!("missing {scoped_endpoint_name}"));
+        if updater_public_key.as_deref() != Some(scoped_public_key.as_str())
+            || updater_endpoint.as_deref() != Some(scoped_endpoint.as_str())
+        {
+            panic!(
+                "generic updater variables must exactly match the {app_environment} Namleh updater variables"
+            );
+        }
+        validate_namleh_updater_endpoint(&app_environment, &scoped_endpoint);
         println!("cargo:rustc-cfg=buzz_updater_enabled");
     }
 

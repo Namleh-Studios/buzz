@@ -19,8 +19,16 @@
 // `markdown.tsx` and by `markdown.test.mjs` running under `node --test
 // --experimental-strip-types`. `tsconfig.json` enables `allowImportingTsExtensions`.
 import { createRemarkPrefixPlugin } from "../../../shared/lib/createRemarkPrefixPlugin.ts";
+import { APP_DEEP_LINK_SCHEME } from "../../../shared/appIdentity.ts";
 
-const MESSAGE_URL_PATTERN = /(?:buzz|buzz):\/\/message\?[^\s<>"')\]]+/g;
+const escapedScheme = APP_DEEP_LINK_SCHEME.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  "\\$&",
+);
+const MESSAGE_URL_PATTERN = new RegExp(
+  `(?:${escapedScheme}|buzz):\\/\\/message\\?[^\\s<>"')\\]]+`,
+  "g",
+);
 const TRAILING_PUNCTUATION_PATTERN = /[.,;:!?]+$/;
 
 function trimMessageLinkMatch(matchText: string) {

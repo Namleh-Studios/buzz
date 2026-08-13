@@ -594,18 +594,20 @@ fn tts_model_slot() -> ModelSlot {
 /// Cheap to clone — all inner state is behind `Arc`.
 #[derive(Clone)]
 pub struct ModelManager {
-    /// `~/.buzz/models/`
+    /// Environment-isolated model directory.
     models_dir: PathBuf,
     stt: ModelSlot,
     tts: ModelSlot,
 }
 
 impl ModelManager {
-    /// Create a new `ModelManager` rooted at `~/.buzz/models/`.
+    /// Create a new `ModelManager` rooted inside the active Namleh nest.
     ///
     /// Returns `None` if the home directory cannot be resolved.
     pub fn new() -> Option<Self> {
-        let models_dir = dirs::home_dir()?.join(".buzz").join("models");
+        let models_dir = dirs::home_dir()?
+            .join(crate::app_identity::current().nest_directory)
+            .join("models");
         let manager = Self {
             models_dir,
             stt: ModelSlot::new(STT_MODEL_DIR_NAME, STT_EXPECTED_FILES, STT_MODEL_VERSION),

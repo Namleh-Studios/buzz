@@ -7,7 +7,7 @@ import {
   KIND_GIT_PULL_REQUEST,
 } from "@/shared/constants/kinds";
 
-import { parseEntityLink } from "./entityLink";
+import { isEntityLink, parseEntityLink } from "./entityLink";
 import {
   buzzEntityFallbackTitle,
   type SupportedLinkPreview,
@@ -288,7 +288,7 @@ export function resolveLinkPreview(
       : "none";
   return {
     ...preview,
-    snapshotReady: !preview.href.startsWith("buzz://"),
+    snapshotReady: !isEntityLink(preview.href),
     title: shouldResolveTitle(preview) ? metadata.title : preview.title,
     description: metadata.description,
     faviconDataUrl: metadata.faviconDataUrl,
@@ -338,7 +338,7 @@ export function useResolvedLinkPreviews(
 
     const cancelScheduledLoads: Array<() => void> = [];
     for (const preview of previews) {
-      const loader = preview.href.startsWith("buzz://")
+      const loader = isEntityLink(preview.href)
         ? entityTitleLoader
         : metadataLoader;
       const cached = loader.peek(preview.href);

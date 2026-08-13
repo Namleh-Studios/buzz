@@ -530,6 +530,14 @@ pub fn spawn_agent_child(
     command.env("RUST_LOG", child_rust_log_filter());
     command.env("BUZZ_PRIVATE_KEY", &record.private_key_nsec);
     command.env("BUZZ_RELAY_URL", &effective_relay_url);
+    command.env(
+        "BUZZ_DEEP_LINK_SCHEME",
+        crate::app_identity::current().deep_link_scheme,
+    );
+    command.env(
+        "BUZZ_APP_BUNDLE_IDENTIFIER",
+        crate::app_identity::current().bundle_identifier,
+    );
     command.env("BUZZ_ACP_LAZY_POOL", if lazy { "true" } else { "false" });
     command.env("BUZZ_ACP_AGENT_COMMAND", &resolved_agent_command);
     command.env("BUZZ_ACP_AGENT_ARGS", agent_args.join(","));

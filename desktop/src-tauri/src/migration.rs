@@ -2,7 +2,7 @@
 //!
 //! **Worktree sync** (`sync_shared_agent_data`): Per-launch symlink creation
 //! from the current worktree data directory to the canonical dev data
-//! directory (`xyz.block.buzz.app.dev`). Only runs when
+//! directory (`com.namlehstudios.buzz.dev`). Only runs when
 //! `BUZZ_SHARE_IDENTITY=1` and `BUZZ_PRIVATE_KEY` is set. All dev
 //! instances share the same physical files — edits in any worktree are
 //! immediately visible to all others.
@@ -21,8 +21,10 @@ use tauri::Manager;
 
 use crate::util::replace_with_symlink;
 
-const CANONICAL_DEV_IDENTIFIER: &str = "xyz.block.buzz.app.dev";
+const CANONICAL_DEV_IDENTIFIER: &str = "com.namlehstudios.buzz.dev";
+#[cfg(test)]
 const LEGACY_CANONICAL_DEV_IDENTIFIER: &str = "xyz.block.sprout.app.dev";
+#[cfg(test)]
 const LEGACY_RELEASE_IDENTIFIER: &str = "xyz.block.sprout.app";
 
 /// JSON files symlinked from worktree data directories to the canonical
@@ -41,8 +43,8 @@ const SHARED_AGENT_DIRS: &[&str] = &["agents/teams"];
 
 /// Returns `true` when `name` is a dev data dir name — i.e. it is exactly the
 /// canonical dev identifier or a worktree variant separated by a `.` (e.g.
-/// `xyz.block.buzz.app.dev.my-branch`). Rejects prefix-collisions such as
-/// `xyz.block.buzz.app.developer`. This is the authoritative dev/prod
+/// `com.namlehstudios.buzz.dev.my-branch`). Rejects prefix-collisions such as
+/// `com.namlehstudios.buzz.developer`. This is the authoritative dev/prod
 /// discriminator shared by `run_boot_migrations`, `sync_shared_agent_data`,
 /// and `reconcile_target_dir`.
 pub(crate) fn is_dev_data_dir_name(name: &str) -> bool {
@@ -56,6 +58,7 @@ fn canonical_dev_data_dir(current: &Path) -> Option<PathBuf> {
     current.parent().map(|p| p.join(CANONICAL_DEV_IDENTIFIER))
 }
 
+#[cfg(test)]
 pub(crate) fn legacy_app_data_dir(current: &Path) -> Option<PathBuf> {
     let name = current.file_name()?.to_str()?;
     let legacy_name = if name.starts_with(CANONICAL_DEV_IDENTIFIER) {
@@ -68,6 +71,7 @@ pub(crate) fn legacy_app_data_dir(current: &Path) -> Option<PathBuf> {
     current.parent().map(|parent| parent.join(legacy_name))
 }
 
+#[cfg(test)]
 fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src)? {
@@ -103,9 +107,9 @@ fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
 }
 
 /// Run every data migration that must complete before identity resolution and
-/// agent restore. Ordering is load-bearing: `migrate_legacy_app_data_dir` must
-/// precede any disk read, and `sync_shared_agent_data` must precede
-/// `restore_managed_agents_on_launch` (which reads `managed-agents.json`).
+/// agent restore. Ordering is load-bearing: `sync_shared_agent_data` must
+/// precede `restore_managed_agents_on_launch` (which reads
+/// `managed-agents.json`).
 /// Identity-dependent migrations (persona/team event signing) run separately in
 /// boot setup after the persisted identity is resolved.
 ///
@@ -128,45 +132,22 @@ pub fn run_boot_migrations_after_reset(app: &tauri::AppHandle) {
     run_boot_migrations_inner(app, true);
 }
 
-fn run_boot_migrations_inner(app: &tauri::AppHandle, reset_completed: bool) {
+fn run_boot_migrations_inner(app: &tauri::AppHandle, _reset_completed: bool) {
     // Initialize the process-lifetime nest directory before any filesystem
     // operation that calls nest_dir(). The discriminator matches the existing
     // pattern used by reconcile_target_dir: dev instances have an app-data-dir
     // name starting with CANONICAL_DEV_IDENTIFIER.
-    let is_dev = if let Ok(data_dir) = app.path().app_data_dir() {
+    if let Ok(data_dir) = app.path().app_data_dir() {
         let dev = data_dir
             .file_name()
             .and_then(|n| n.to_str())
             .is_some_and(is_dev_data_dir_name);
         crate::managed_agents::init_nest_dir(dev);
-        dev
     } else {
-        false
-    };
-
-    // On dev builds, copy `.repos-dir` from ~/.buzz → ~/.buzz-dev BEFORE
-    // control returns to lib.rs where resolve_repos_at_boot() reads it. This
-    // ensures the dev nest boots with the correct workspace on its first launch,
-    // matching what the prod nest had configured. Skip-if-dest-exists so it is
-    // idempotent and never clobbers a value the dev nest already set explicitly.
-    // Uses the composed helper so the gate + migration run through the same
-    // code path that the behavioral test exercises.
-    if let (Some(home), Some(dev_nest)) = (dirs::home_dir(), crate::managed_agents::nest_dir()) {
-        maybe_migrate_dev_repos_dir(is_dev, reset_completed, &home, &dev_nest);
+        crate::managed_agents::init_nest_dir(false);
     }
 
-    migrate_legacy_app_data_dir(app);
     sync_shared_agent_data(app);
-    // Dev-build-only: copy any agent keys that exist in the production
-    // keyring ("buzz-desktop") into the dev service ("buzz-desktop-dev")
-    // so existing agents don't lose their keys after the service-name split.
-    // Must run after sync_shared_agent_data (JSON symlinked) and before
-    // any load_managed_agents call (which runs hydrate_keys against the
-    // dev service and would log "has no key" for un-migrated entries).
-    #[cfg(debug_assertions)]
-    if is_dev {
-        crate::managed_agents::migrate_agent_keys_to_dev_service(app);
-    }
     migrate_persona_provider_to_runtime(app);
     reconcile_legacy_command_names(app);
     // Fold personas.json into the unified store HERE: after the JSON-level
@@ -193,38 +174,6 @@ fn run_boot_migrations_inner(app: &tauri::AppHandle, reset_completed: bool) {
     materialize_agent_runtimes(app);
 }
 
-/// Copy one-time app state from the legacy app identifier directory to
-/// the current Buzz identifier directory. The Tauri identifier controls the app
-/// data path, so without this copy a product rename would look like a fresh
-/// install and users would lose their persisted identity and agent settings.
-pub fn migrate_legacy_app_data_dir(app: &tauri::AppHandle) {
-    let current_dir = match app.path().app_data_dir() {
-        Ok(dir) => dir,
-        Err(e) => {
-            eprintln!("buzz-desktop: app-data-migration: cannot resolve app data dir: {e}");
-            return;
-        }
-    };
-    let Some(legacy_dir) = legacy_app_data_dir(&current_dir) else {
-        return;
-    };
-    if !legacy_dir.exists() {
-        return;
-    }
-    match copy_dir_all(&legacy_dir, &current_dir) {
-        Ok(()) => eprintln!(
-            "buzz-desktop: app-data-migration: copied legacy data from {} to {}",
-            legacy_dir.display(),
-            current_dir.display()
-        ),
-        Err(error) => eprintln!(
-            "buzz-desktop: app-data-migration: failed to copy {} to {}: {error}",
-            legacy_dir.display(),
-            current_dir.display()
-        ),
-    }
-}
-
 /// Knowledge directories and files carried from the legacy nest into the live
 /// nest. Deliberately excludes `REPOS/`: cloned repositories are re-clonable by
 /// definition (Will's stranded `REPOS/` measured 62 GB of checkouts plus build
@@ -240,6 +189,7 @@ pub fn migrate_legacy_app_data_dir(app: &tauri::AppHandle) {
 /// these dirs (e.g. by a skill writing into `.scratch/`) would hit that branch's
 /// clobber/abort hazard. The per-entry log-and-continue below bounds the blast
 /// radius of such a failure to the single offending entry.
+#[cfg(test)]
 const LEGACY_NEST_KNOWLEDGE: &[&str] = &[
     "AGENTS.md",
     "RESEARCH",
@@ -268,6 +218,8 @@ const LEGACY_NEST_KNOWLEDGE: &[&str] = &[
 /// Returns `true` when a legacy `~/.sprout` nest was present (migration ran),
 /// so the caller can emit a one-time hint inviting the user to delete it. The
 /// frontend dedupes the hint, so re-firing while `~/.sprout` lingers is benign.
+#[cfg(test)]
+#[allow(dead_code)]
 pub fn migrate_legacy_nest() -> bool {
     let Some(home) = dirs::home_dir() else {
         eprintln!("buzz-desktop: nest-migration: cannot resolve home directory");
@@ -286,6 +238,7 @@ pub fn migrate_legacy_nest() -> bool {
 /// Each entry is copied independently with its own log-and-continue, so a
 /// failure on one entry never skips the rest. No-ops cleanly when `legacy` is
 /// absent or an entry does not exist. Returns `true` when `legacy` existed.
+#[cfg(test)]
 fn migrate_legacy_nest_at(legacy: &Path, current: &Path) -> bool {
     if !legacy.exists() {
         return false;
@@ -338,11 +291,13 @@ fn migrate_legacy_nest_at(legacy: &Path, current: &Path) -> bool {
 /// copy. Using an explicit marker instead of checking for RESEARCH/PLANS
 /// content decouples the dev migration from the `.sprout` migration, which
 /// also copies into `~/.buzz-dev` and could otherwise set the sentinel early.
+#[cfg(test)]
 const DEV_NEST_MIGRATED_SENTINEL: &str = ".dev-nest-migrated";
 
 /// Returns true when `migrate_dev_repos_dir` should run: dev build AND no
 /// completed reset this boot (a completed reset means the dev nest was just
 /// wiped — re-importing from prod would undo the sign-out).
+#[cfg(test)]
 pub(crate) fn should_migrate_dev_repos_dir(is_dev: bool, reset_completed: bool) -> bool {
     is_dev && !reset_completed
 }
@@ -350,6 +305,7 @@ pub(crate) fn should_migrate_dev_repos_dir(is_dev: bool, reset_completed: bool) 
 /// Injectable core: copy `.repos-dir` from `<home>/.buzz/` into `dev_nest`,
 /// non-destructively. Extracted so tests can inject temp paths without
 /// touching `dirs::home_dir()` or the global `nest_dir()` OnceLock.
+#[cfg(test)]
 pub(crate) fn migrate_dev_repos_dir_at(home: &Path, dev_nest: &Path) {
     let src = home.join(".buzz").join(".repos-dir");
     if !src.exists() {
@@ -388,6 +344,7 @@ pub(crate) fn migrate_dev_repos_dir_at(home: &Path, dev_nest: &Path) {
 /// the gate passes, runs the injectable migration core. This is the seam that
 /// `run_boot_migrations_inner` calls with real paths — a future mis-wired flag
 /// or inverted gate breaks tests at this level, not just the predicate.
+#[cfg(test)]
 pub(crate) fn maybe_migrate_dev_repos_dir(
     is_dev: bool,
     reset_completed: bool,
@@ -418,6 +375,8 @@ pub(crate) fn maybe_migrate_dev_repos_dir(
 ///
 /// Only runs on dev builds (checked by the caller). Returns `true` when
 /// contents were copied (useful for a one-time log message, not required).
+#[cfg(test)]
+#[allow(dead_code)]
 pub fn migrate_dev_nest() -> bool {
     let Some(home) = dirs::home_dir() else {
         eprintln!("buzz-desktop: dev-nest-migration: cannot resolve home directory");
@@ -450,6 +409,7 @@ pub fn migrate_dev_nest() -> bool {
 
 /// Copy a single file only if the destination does not already exist, matching
 /// `copy_dir_all`'s non-destructive guard for top-level files (e.g. `AGENTS.md`).
+#[cfg(test)]
 fn copy_file_if_absent(src: &Path, dst: &Path) -> std::io::Result<()> {
     if dst.exists() {
         return Ok(());
@@ -469,6 +429,7 @@ fn copy_file_if_absent(src: &Path, dst: &Path) -> std::io::Result<()> {
 /// default, so `copy_file_if_absent` would always skip the legacy file and
 /// strand the user's instructions. This lets the legacy `AGENTS.md` win over
 /// that pristine default while never clobbering content a user has changed.
+#[cfg(test)]
 fn copy_file_over_generated_default(src: &Path, dst: &Path) -> std::io::Result<()> {
     if dst.exists() {
         let current = std::fs::read_to_string(dst)?;

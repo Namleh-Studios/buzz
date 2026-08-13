@@ -6,6 +6,7 @@ import {
   isSupportedLinkAutolinkLabel,
   parseSupportedLinkPreview,
 } from "./linkPreview.ts";
+import { APP_DEEP_LINK_SCHEME } from "../appIdentity.ts";
 
 test("parseSupportedLinkPreview parses GitHub pull request URLs", () => {
   assert.deepEqual(
@@ -65,7 +66,7 @@ test("parseSupportedLinkPreview parses Buzz relay git clone URLs", () => {
     ),
     {
       kind: "buzz-repository",
-      href: `buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`,
+      href: `${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`,
       provider: "Buzz",
       title: "buzz-world-galaxy",
       typeLabel: "repo",
@@ -88,7 +89,7 @@ test("parseSupportedLinkPreview strips .git suffix from clone URLs", () => {
     ),
     {
       kind: "buzz-repository",
-      href: `buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world`,
+      href: `${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world`,
       provider: "Buzz",
       title: "buzz-world",
       typeLabel: "repo",
@@ -154,7 +155,7 @@ test("parseSupportedLinkPreview parses buzz:// PR and issue deep links", () => {
     ),
     {
       kind: "buzz-pull-request",
-      href: `buzz://pr?id=${BUZZ_EVENT_ID}&owner=${BUZZ_OWNER}&d=buzz-world`,
+      href: `${APP_DEEP_LINK_SCHEME}://pr?id=${BUZZ_EVENT_ID}&owner=${BUZZ_OWNER}&d=buzz-world`,
       provider: "Buzz",
       title: "buzz-world #c3b589fa",
       typeLabel: "PR",
@@ -170,11 +171,36 @@ test("parseSupportedLinkPreview parses buzz:// PR and issue deep links", () => {
     parseSupportedLinkPreview(`buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world`),
     {
       kind: "buzz-repository",
-      href: `buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world`,
+      href: `${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world`,
       provider: "Buzz",
       title: "buzz-world",
       typeLabel: "repo",
     },
+  );
+});
+
+test("extractSupportedLinkPreviews finds canonical Namleh entity links", () => {
+  const href = `${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world`;
+  assert.deepEqual(extractSupportedLinkPreviews(href, null), [
+    {
+      kind: "buzz-repository",
+      href,
+      provider: "Buzz",
+      title: "buzz-world",
+      typeLabel: "repo",
+    },
+  ]);
+  assert.deepEqual(
+    extractSupportedLinkPreviews(`[buzz-world](${href})`, null),
+    [
+      {
+        kind: "buzz-repository",
+        href,
+        provider: "Buzz",
+        title: "buzz-world",
+        typeLabel: "repo",
+      },
+    ],
   );
 });
 
@@ -277,7 +303,7 @@ test("extractSupportedLinkPreviews picks up bare Buzz clone URLs in prose", () =
     [
       {
         kind: "buzz-repository",
-        href: `buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`,
+        href: `${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`,
         provider: "Buzz",
         title: "buzz-world-galaxy",
         typeLabel: "repo",
@@ -312,7 +338,7 @@ test("extractSupportedLinkPreviews dedupes clone URL variants of one repo", () =
       ].join(" "),
       "https://relay.example",
     ).map((preview) => preview.href),
-    [`buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`],
+    [`${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`],
   );
 });
 
@@ -325,7 +351,7 @@ test("clone URLs and buzz://repo links for the same repo dedupe to one card", ()
       ].join(" "),
       "https://relay.example",
     ).map((preview) => preview.href),
-    [`buzz://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`],
+    [`${APP_DEEP_LINK_SCHEME}://repo?owner=${BUZZ_OWNER}&d=buzz-world-galaxy`],
   );
 });
 
