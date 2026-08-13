@@ -18,6 +18,7 @@ export function NamlehAppMark({
     <img
       alt={decorative ? "" : label}
       className={cn("select-none", className)}
+      data-testid="namleh-app-mark"
       draggable={false}
       src={APP_ICON_SRC}
       srcSet={APP_ICON_SRC_SET}
