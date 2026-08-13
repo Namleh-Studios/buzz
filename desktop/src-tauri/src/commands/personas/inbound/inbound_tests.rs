@@ -675,6 +675,23 @@ fn inbound_gate_accepts_validly_signed_event() {
 }
 
 #[test]
+fn inbound_gate_rejects_valid_event_from_wrong_owner() {
+    use nostr::JsonUtil;
+    let active_owner = nostr::Keys::generate();
+    let attacker = nostr::Keys::generate();
+    let event = nostr::EventBuilder::new(nostr::Kind::Custom(30175), "{}")
+        .tags(vec![nostr::Tag::parse(["d", "victim-slug"]).unwrap()])
+        .sign_with_keys(&attacker)
+        .unwrap();
+    let parsed = parse_verified_inbound_event(&event.as_json()).unwrap();
+
+    let error = authorize_inbound_owner(&parsed, &active_owner.public_key())
+        .expect_err("a valid signature from another owner must not authorize local mutation");
+
+    assert!(error.contains("active workspace owner"));
+}
+
+#[test]
 fn inbound_persona_rejects_invisible_definition_text() {
     let mut inbound = inbound_for("unsafe", "Remote");
     inbound.system_prompt = "Review\u{200B} code.".to_string();

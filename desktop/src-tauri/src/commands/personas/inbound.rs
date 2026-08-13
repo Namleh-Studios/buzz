@@ -82,6 +82,8 @@ fn reconcile_inbound_persona_event_blocking(
 
     let state = app.state::<AppState>();
     let event = parse_verified_inbound_event(&event_json)?;
+    let active_owner = state.signing_keys()?.public_key();
+    authorize_inbound_owner(&event, &active_owner)?;
 
     // The live filter subscribes to 30175/30176/30177 (upserts) plus kind:5
     // (NIP-09 deletions). d-tags are NOT unique across kinds, so every path
@@ -142,6 +144,7 @@ fn reconcile_inbound_persona_event_blocking(
     else {
         return Ok(());
     };
+    authorize_inbound_owner(&event, &scope.owner_keys.public_key())?;
     let conn = open_retention_db(&scope.db_path)?;
     let outcome = retain_inbound_event(
         &conn,
@@ -232,6 +235,16 @@ fn parse_verified_inbound_event(event_json: &str) -> Result<nostr::Event, String
     Ok(event)
 }
 
+fn authorize_inbound_owner(
+    event: &nostr::Event,
+    expected_owner: &nostr::PublicKey,
+) -> Result<(), String> {
+    if event.pubkey != *expected_owner {
+        return Err("inbound event author does not match the active workspace owner".to_string());
+    }
+    Ok(())
+}
+
 /// Parse a NIP-09 `a`-tag coordinate `<kind>:<owner_pubkey>:<d_tag>` into its
 /// target kind and d-tag. Returns `None` if the tag is absent or malformed, so
 /// the caller no-ops on a tombstone it can't route.
@@ -304,6 +317,7 @@ fn reconcile_inbound_tombstone(
     else {
         return Ok(());
     };
+    authorize_inbound_owner(event, &scope.owner_keys.public_key())?;
     let conn = open_retention_db(&scope.db_path)?;
     let outcome = retain_inbound_event(
         &conn,
