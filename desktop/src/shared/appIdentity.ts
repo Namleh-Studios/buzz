@@ -29,7 +29,7 @@ const viteEnvironment = (
 
 const configuredEnvironment =
   viteEnvironment?.VITE_NAMLEH_APP_ENV ?? "development";
-if (!(configuredEnvironment in ENVIRONMENT_IDENTITIES)) {
+if (!Object.hasOwn(ENVIRONMENT_IDENTITIES, configuredEnvironment)) {
   throw new Error(`Invalid VITE_NAMLEH_APP_ENV: ${configuredEnvironment}`);
 }
 

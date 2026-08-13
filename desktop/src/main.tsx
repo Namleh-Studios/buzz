@@ -19,9 +19,10 @@ import { EmojiBurstProvider } from "@/shared/ui/EmojiBurstProvider";
 import { PoofBurstProvider } from "@/shared/ui/PoofBurstProvider";
 import { Toaster } from "@/shared/ui/sonner";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { StagingIndicator } from "@/shared/ui/StagingIndicator";
 import { recoverLocalStorageQuotaOnStartup } from "@/shared/lib/localStorageQuota";
 import { startLocalStorageSweep } from "@/shared/lib/localStorageSweep";
-import { APP_PRODUCT_NAME, NAMLEH_APP_ENVIRONMENT } from "@/shared/appIdentity";
+import { APP_ICON_SRC, APP_PRODUCT_NAME } from "@/shared/appIdentity";
 
 type E2eWindow = Window & {
   __BUZZ_E2E__?: unknown;
@@ -31,18 +32,6 @@ const E2E_DEFAULT_PUBKEY = "deadbeef".repeat(8);
 const E2E_COMMUNITY_ID = "e2e-default-community";
 const ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX = "buzz-onboarding-complete.v1:";
 const DEV_STATE_RESET_PARAM = "resetDevState";
-
-function StagingIndicator() {
-  if (NAMLEH_APP_ENVIRONMENT !== "staging") return null;
-  return (
-    <div
-      className="pointer-events-none fixed top-[4px] left-1/2 z-[100] -translate-x-1/2 rounded-full border border-black/30 bg-[var(--namleh-staging-background)] px-3 py-[2px] font-semibold text-[var(--namleh-staging-foreground)] text-xs leading-none shadow-md"
-      data-testid="staging-indicator"
-    >
-      STAGING
-    </div>
-  );
-}
 
 function resetDevWebviewStateFromUrl() {
   if (!import.meta.env.DEV) {
@@ -93,6 +82,7 @@ function configureDevE2eBridgeFromUrl() {
 function renderApp() {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
+      <StagingIndicator />
       {/* block/buzz#5078 — catch any uncaught render error so a WebKit
           SecurityError from localStorage can't blank the whole window. */}
       <RootErrorBoundary>
@@ -106,7 +96,6 @@ function renderApp() {
                   <PoofBurstProvider>
                     <UpdaterProvider>
                       <App />
-                      <StagingIndicator />
                       <NostrBindConsentDialog />
                     </UpdaterProvider>
                     <Toaster />
@@ -136,10 +125,17 @@ async function installE2eBridgeIfConfigured() {
 }
 
 async function bootstrap() {
-  document.title = APP_PRODUCT_NAME;
+  const windowTitle =
+    huddleWindowChannelId() === null
+      ? APP_PRODUCT_NAME
+      : `${APP_PRODUCT_NAME} — Huddle`;
+  document.title = windowTitle;
+  document
+    .querySelector<HTMLLinkElement>("#app-favicon")
+    ?.setAttribute("href", APP_ICON_SRC);
   if (isTauri()) {
     void getCurrentWindow()
-      .setTitle(APP_PRODUCT_NAME)
+      .setTitle(windowTitle)
       .catch((error) => {
         console.warn("native window title unavailable", error);
       });

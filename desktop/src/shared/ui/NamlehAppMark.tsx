@@ -8,13 +8,15 @@ import { cn } from "@/shared/lib/cn";
 export function NamlehAppMark({
   className,
   decorative = true,
+  label = `${APP_PRODUCT_NAME} icon`,
 }: {
   className?: string;
   decorative?: boolean;
+  label?: string;
 }) {
   return (
     <img
-      alt={decorative ? "" : `${APP_PRODUCT_NAME} icon`}
+      alt={decorative ? "" : label}
       className={cn("select-none", className)}
       draggable={false}
       src={APP_ICON_SRC}

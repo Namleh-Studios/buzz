@@ -11,6 +11,8 @@ const readJson = (path) =>
   JSON.parse(readFileSync(resolve(root, path), "utf8"));
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 const readBytes = (path) => readFileSync(resolve(root, path));
+const sha256 = (path) =>
+  createHash("sha256").update(readBytes(path)).digest("hex");
 
 function pngDimensions(path) {
   const bytes = readBytes(path);
@@ -79,12 +81,53 @@ for (const environment of environments) {
 }
 
 assert.equal(
-  createHash("sha256")
-    .update(readBytes("desktop/src-tauri/icons/namleh/source/namleh-icon.svg"))
-    .digest("hex"),
+  sha256("desktop/src-tauri/icons/namleh/source/namleh-icon.svg"),
   "1086d6ed3aacc7e2940abbfbce653308ec8baf7263eb9d77cf9f1d743f15e511",
   "the committed Namleh icon must match the approved source asset",
 );
+const generatedAssetHashes = {
+  "desktop/src-tauri/icons/namleh/source/namleh-menu-template.png":
+    "7760178c97a7629b27a40e034b1a6136ff54efe08e3657daf9f72907894f7934",
+  "desktop/src-tauri/icons/namleh/production/source.svg":
+    "236ca4595a2a04c202bef6febe65eef7db0380583c08cac22b8b0270ecfad509",
+  "desktop/src-tauri/icons/namleh/production/32x32.png":
+    "b045e8954a1779841f90174a1769322831d3930c1ae038fd20c855deb5c6dc7a",
+  "desktop/src-tauri/icons/namleh/production/128x128.png":
+    "2985e4b82bd08df18c7aee04a8cb4798282c17ad1fc9bb557837857b45896659",
+  "desktop/src-tauri/icons/namleh/production/128x128@2x.png":
+    "dc34edd90cce86712b5c684f26424c033f58e473d627b050c001c058a6350fb9",
+  "desktop/src-tauri/icons/namleh/production/icon.icns":
+    "4caa08162ded25fe03d8659298c77660e0943c5e2c654b684d948967dabd664c",
+  "desktop/src-tauri/icons/namleh/production/dmg-background.svg":
+    "9dab2ec279f3a4f84f6920aee539b23a4f4fc7e1c11ca02097507f664788aa34",
+  "desktop/src-tauri/icons/namleh/production/dmg-background.png":
+    "252362917242bd94fe7e019107d394978d792bac00504f2ac94ddde42a930190",
+  "desktop/src-tauri/icons/namleh/staging/source.svg":
+    "9b6cb90cacf76e806044cb325128700634187d0b870873a318b6c52ae4e56ae7",
+  "desktop/src-tauri/icons/namleh/staging/32x32.png":
+    "62f07234a721575b4f48e93f5b5fc63db8979a68cd617b093f3575ef4ff21036",
+  "desktop/src-tauri/icons/namleh/staging/128x128.png":
+    "2b5d1fda952601f4fbd2035f83c23b3c0d8ae31fe36311b60cbef81940be66b9",
+  "desktop/src-tauri/icons/namleh/staging/128x128@2x.png":
+    "c9c650a22464d7ac776033159d75b49584a41ab36222b040a60536cc23a18bf5",
+  "desktop/src-tauri/icons/namleh/staging/icon.icns":
+    "edddfa9435698eee1a120dd71b59cbbdb5f4270168ee91798ba84ac8c363521a",
+  "desktop/src-tauri/icons/namleh/staging/dmg-background.svg":
+    "4b5d8a477910f5a6eeea9b0a1c02757ebceee5acd4aed286e90c10acac6dbd85",
+  "desktop/src-tauri/icons/namleh/staging/dmg-background.png":
+    "c62be2e4f1ca54e22cdc88d9010d22d76cac0098cf3e34f078810bd79b319f7d",
+  "desktop/public/namleh-production-app-icon@2x.png":
+    "cb214f0f03d12552978cd597f811b82855e485a3207d74b2850b1f21e604a38b",
+  "desktop/public/namleh-production-app-icon@3x.png":
+    "098b4a32842b8f35b9f40e19c8b6cb9ef30d705dae4d81c68f04ee602ed95415",
+  "desktop/public/namleh-staging-app-icon@2x.png":
+    "dd9a000944febe37449903cba89f644fb07138b4a06d032a4221f53ca6142609",
+  "desktop/public/namleh-staging-app-icon@3x.png":
+    "df1d6d57d5924965dc30dc3cfa307057c73993c651bde0de8af769648560c74c",
+};
+for (const [path, expectedHash] of Object.entries(generatedAssetHashes)) {
+  assert.equal(sha256(path), expectedHash, `${path} must match approved output`);
+}
 assert.deepEqual(
   pngDimensions(
     "desktop/src-tauri/icons/namleh/source/namleh-menu-template.png",
@@ -157,6 +200,7 @@ assert.doesNotMatch(
 
 const rendererIdentity = read("desktop/src/shared/appIdentity.ts");
 assert.ok(rendererIdentity.includes("APP_ICON_SRC"));
+assert.ok(rendererIdentity.includes("Object.hasOwn"));
 for (const identity of Object.values(identities)) {
   assert.ok(rendererIdentity.includes(identity.productName));
   assert.ok(rendererIdentity.includes(identity.bundleIdentifier));
@@ -164,6 +208,19 @@ for (const identity of Object.values(identities)) {
 }
 assert.ok(read("desktop/src/main.tsx").includes("APP_PRODUCT_NAME"));
 assert.ok(read("desktop/src-tauri/src/huddle/window.rs").includes("product_name"));
+assert.ok(
+  read("desktop/src-tauri/capabilities/default.json").includes(
+    "core:window:allow-set-title",
+  ),
+);
+assert.ok(read("desktop/index.html").includes("buzz-theme-cache-v2"));
+assert.doesNotMatch(read("desktop/index.html"), /href="\/buzz\.svg/);
+assert.ok(read("desktop/src/main.tsx").includes('"#app-favicon"'));
+const builderlabSource = read("desktop/src-tauri/src/builderlab.rs");
+const builderlabProductionSource = builderlabSource.split("#[cfg(test)]")[0];
+assert.ok(builderlabSource.includes("{{PRODUCT_NAME}}"));
+assert.ok(builderlabSource.includes("namleh-icon.svg"));
+assert.doesNotMatch(builderlabProductionSource, /bee-mask/);
 const developmentConfig = readJson("desktop/src-tauri/tauri.conf.json");
 assert.equal(developmentConfig.bundle.publisher, "Namleh Studios");
 assert.deepEqual(developmentConfig.bundle.icon, [

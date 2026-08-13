@@ -22,6 +22,20 @@ const source = readFileSync(sourcePath, "utf8");
 const expectedSourceSha256 =
   "1086d6ed3aacc7e2940abbfbce653308ec8baf7263eb9d77cf9f1d743f15e511";
 const sourceSha256 = createHash("sha256").update(source).digest("hex");
+const canonicalIcnsOrder = [
+  "is32",
+  "s8mk",
+  "il32",
+  "l8mk",
+  "ic07",
+  "ic08",
+  "ic09",
+  "ic10",
+  "ic11",
+  "ic12",
+  "ic13",
+  "ic14",
+];
 
 if (sourceSha256 !== expectedSourceSha256) {
   throw new Error(
@@ -86,7 +100,7 @@ function iconSvg(environment) {
   <svg x="${markInset}" y="${markInset}" width="${markSize}" height="${markSize}" viewBox="0 0 2048 2048">
 ${inner}
   </svg>
-  ${stagingBadge}
+${stagingBadge}
 </svg>
 `;
 }
@@ -109,9 +123,42 @@ ${inner}
   </svg>
   <text x="660" y="438" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="700" fill="#071225">${productName}</text>
   <text x="660" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" fill="#29415f">Drag the app into Applications</text>
-  ${staging ? '<rect x="540" y="530" width="240" height="66" rx="33" fill="#f5a524"/><text x="660" y="575" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="#111827">STAGING</text>' : ""}
+${staging ? '  <rect x="540" y="530" width="240" height="66" rx="33" fill="#f5a524"/><text x="660" y="575" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="#111827">STAGING</text>' : ""}
 </svg>
 `;
+}
+
+function canonicalizeIcns(path) {
+  const bytes = readFileSync(path);
+  if (bytes.subarray(0, 4).toString("ascii") !== "icns") {
+    throw new Error(`Generated icon is not an ICNS container: ${path}`);
+  }
+  const chunks = [];
+  for (let offset = 8; offset < bytes.length; ) {
+    const length = bytes.readUInt32BE(offset + 4);
+    if (length < 8 || offset + length > bytes.length) {
+      throw new Error(`Generated ICNS contains an invalid chunk: ${path}`);
+    }
+    chunks.push(bytes.subarray(offset, offset + length));
+    offset += length;
+  }
+  chunks.sort((left, right) => {
+    const leftType = left.subarray(0, 4).toString("ascii");
+    const rightType = right.subarray(0, 4).toString("ascii");
+    const leftIndex = canonicalIcnsOrder.indexOf(leftType);
+    const rightIndex = canonicalIcnsOrder.indexOf(rightType);
+    const order =
+      (leftIndex === -1 ? canonicalIcnsOrder.length : leftIndex) -
+      (rightIndex === -1 ? canonicalIcnsOrder.length : rightIndex);
+    return (
+      order || leftType.localeCompare(rightType) || Buffer.compare(left, right)
+    );
+  });
+  const body = Buffer.concat(chunks);
+  const header = Buffer.alloc(8);
+  header.write("icns", 0, "ascii");
+  header.writeUInt32BE(body.length + header.length, 4);
+  writeFileSync(path, Buffer.concat([header, body]));
 }
 
 const tempDirectory = mkdtempSync(resolve(tmpdir(), "namleh-macos-icons-"));
@@ -135,6 +182,7 @@ try {
         result.stderr || result.stdout || "Tauri icon generation failed",
       );
     }
+    canonicalizeIcns(resolve(generatedDirectory, "icon.icns"));
 
     mkdirSync(destinationDirectory, { recursive: true });
     for (const filename of [

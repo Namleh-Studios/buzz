@@ -104,18 +104,22 @@ fn format_elapsed(elapsed: Duration) -> String {
     format!("{hours}h {minutes}m {seconds}s")
 }
 
-fn namleh_tray_icon() -> Image<'static> {
+fn namleh_tray_icon() -> tauri::Result<Image<'static>> {
     let decoded = image::load_from_memory(include_bytes!(
         "../icons/namleh/source/namleh-menu-template.png"
     ))
-    .expect("Namleh menu template must decode")
+    .map_err(|error| {
+        tauri::Error::Anyhow(anyhow::anyhow!(
+            "Namleh menu template failed to decode: {error}"
+        ))
+    })?
     .to_rgba8();
     let (width, height) = decoded.dimensions();
     let mut rgba = decoded.into_raw();
     for pixel in rgba.chunks_exact_mut(4) {
         pixel[..3].fill(0);
     }
-    Image::new_owned(rgba, width, height)
+    Ok(Image::new_owned(rgba, width, height))
 }
 
 /// A running agent and its current channel.
@@ -426,7 +430,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     });
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .icon(namleh_tray_icon())
+        .icon(namleh_tray_icon()?)
         .icon_as_template(true)
         .on_menu_event(|app, event| handle_menu_event(app, event.id.as_ref()))
         .build(app)?;

@@ -69,16 +69,26 @@ test("root boundary shows recovery UI without exposing error details", async () 
   const { createElement } = await import("react");
   const { render, screen } = await import("@testing-library/react");
   const { RootErrorBoundary } = await import("./RootErrorBoundary.tsx");
+  const { StagingIndicator } = await import("@/shared/ui/StagingIndicator");
   function ThrowingProvider() {
     throw new Error(diagnostic);
   }
 
-  render(
-    createElement(RootErrorBoundary, null, createElement(ThrowingProvider)),
-  );
+  render([
+    createElement(StagingIndicator, {
+      environment: "staging",
+      key: "staging",
+    }),
+    createElement(
+      RootErrorBoundary,
+      { key: "boundary" },
+      createElement(ThrowingProvider),
+    ),
+  ]);
 
   assert.ok(screen.getByText("Namleh Buzz Dev failed to start"));
   assert.ok(screen.getByRole("button", { name: "Reload" }));
   assert.equal(document.body.textContent.includes(diagnostic), false);
   assert.match(document.body.textContent, /contact support/i);
+  assert.ok(screen.getByText("STAGING"));
 });
