@@ -9,6 +9,11 @@ import { relayClient } from "@/shared/api/relayClient";
 import { signRelayEvent, uploadMediaBytes } from "@/shared/api/tauri";
 import { pickAndUploadImage } from "@/shared/api/tauriMedia";
 import { KIND_PRODUCT_FEEDBACK } from "@/shared/constants/kinds";
+import {
+  APP_BUNDLE_IDENTIFIER,
+  APP_PRODUCT_NAME,
+  NAMLEH_APP_ENVIRONMENT,
+} from "@/shared/appIdentity";
 
 async function collectDiagnostics(): Promise<string> {
   let appVersion = "unknown";
@@ -19,7 +24,9 @@ async function collectDiagnostics(): Promise<string> {
   }
   const nav = typeof navigator !== "undefined" ? navigator : undefined;
   return [
-    "Buzz feedback diagnostics",
+    `${APP_PRODUCT_NAME} feedback diagnostics`,
+    `environment: ${NAMLEH_APP_ENVIRONMENT}`,
+    `bundle identifier: ${APP_BUNDLE_IDENTIFIER}`,
     `captured: ${new Date().toISOString()}`,
     `app version: ${appVersion}`,
     `platform: ${nav?.platform ?? "unknown"}`,

@@ -6,9 +6,8 @@
  * given the theme's TerminalPalette. Colour is derived in the renderer and
  * regenerated only on viewport or theme change.
  *
- * Why the palette and not the CSS vars: `--primary` is a user preference that
- * collapses to `--foreground` on the Buzz themes (ThemeProvider.tsx), and
- * `--secondary` / `--accent` are assigned the same 6% hover tint
+ * Why the palette and not the CSS vars: `--primary` is a user or brand accent,
+ * while `--secondary` / `--accent` are assigned the same 6% hover tint
  * (adaptive-theme.ts:241-243). A literal primary/secondary/accent fade is two
  * stops, one of which is the background. The TerminalPalette carries the
  * theme's real hues, so the three stops come from there.

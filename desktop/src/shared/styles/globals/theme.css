@@ -48,11 +48,13 @@
     --sidebar-border: 225 13.56% 76.86%;
     --sidebar-ring: 225 13.56% 76.86%;
     /* Exact Buzz palette tokens; components consume these semantically. */
-    --buzz-gradient-light-top: #e6e6b6;
-    --buzz-gradient-light-bottom: #c4d0da;
-    --buzz-gradient-dark-top: #4a4616;
-    --buzz-gradient-dark-bottom: #0a1423;
+    --buzz-gradient-light-top: #edf5ff;
+    --buzz-gradient-light-bottom: #d7e3f2;
+    --buzz-gradient-dark-top: #121b2a;
+    --buzz-gradient-dark-bottom: #05070b;
     --buzz-content-dark: 0 0% 10.1960784314%;
+    --namleh-staging-background: #f5a524;
+    --namleh-staging-foreground: #111827;
     /* Hosted-community onboarding intentionally keeps this light palette in
        both app themes; semantic tokens keep component code color-agnostic. */
     --buzz-hosted-community-surface-fg: 23 23 23;
@@ -221,6 +223,10 @@
   --buzz-active-fill: 0 0% 0%;
   --buzz-active-surface: rgb(0 0 0 / 7%);
   --buzz-active-foreground: var(--foreground);
+}
+
+:root[data-buzz-sidebar] ::selection {
+  background-color: hsl(var(--buzz-selected-accent) / 0.28);
 }
 
 /*

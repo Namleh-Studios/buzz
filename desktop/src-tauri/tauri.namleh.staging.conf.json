@@ -9,8 +9,19 @@
     }
   },
   "bundle": {
+    "icon": [
+      "icons/namleh/staging/32x32.png",
+      "icons/namleh/staging/128x128.png",
+      "icons/namleh/staging/128x128@2x.png",
+      "icons/namleh/staging/icon.icns"
+    ],
+    "publisher": "Namleh Studios",
+    "copyright": "Copyright 2026 Block, Inc. Licensed under Apache-2.0; modifications Copyright 2026 Namleh Studios.",
     "macOS": {
-      "entitlements": "Entitlements.namleh.staging.plist"
+      "entitlements": "Entitlements.namleh.staging.plist",
+      "dmg": {
+        "background": "icons/namleh/staging/dmg-background.png"
+      }
     }
   }
 }

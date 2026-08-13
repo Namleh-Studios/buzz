@@ -204,7 +204,7 @@
   }
 
   .buzz-terminal-selection-layer::selection {
-    background: hsl(var(--accent) / 0.65);
+    background: hsl(var(--buzz-selected-accent) / 0.32);
     color: transparent;
   }
 

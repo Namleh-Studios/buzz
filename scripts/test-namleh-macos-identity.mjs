@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -9,6 +10,26 @@ const root = resolve(import.meta.dirname, "..");
 const readJson = (path) =>
   JSON.parse(readFileSync(resolve(root, path), "utf8"));
 const read = (path) => readFileSync(resolve(root, path), "utf8");
+const readBytes = (path) => readFileSync(resolve(root, path));
+
+function pngDimensions(path) {
+  const bytes = readBytes(path);
+  assert.equal(bytes.subarray(1, 4).toString("ascii"), "PNG");
+  return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)];
+}
+
+function icnsTypes(path) {
+  const bytes = readBytes(path);
+  assert.equal(bytes.subarray(0, 4).toString("ascii"), "icns");
+  const types = new Set();
+  for (let offset = 8; offset + 8 <= bytes.length; ) {
+    const length = bytes.readUInt32BE(offset + 4);
+    assert.ok(length >= 8 && offset + length <= bytes.length);
+    types.add(bytes.subarray(offset, offset + 4).toString("ascii"));
+    offset += length;
+  }
+  return types;
+}
 
 const identities = readJson("desktop/namleh-app-identities.json");
 const environments = ["development", "staging", "production"];
@@ -52,7 +73,117 @@ for (const environment of environments) {
   assert.equal(identity.cacheNamespace, identity.bundleIdentifier);
   assert.equal(identity.logNamespace, identity.bundleIdentifier);
   assert.ok(identity.providerBindingPath.startsWith(identity.bundleIdentifier));
-  assert.ok(identity.browserCheckpointPath.startsWith(identity.bundleIdentifier));
+  assert.ok(
+    identity.browserCheckpointPath.startsWith(identity.bundleIdentifier),
+  );
+}
+
+assert.equal(
+  createHash("sha256")
+    .update(readBytes("desktop/src-tauri/icons/namleh/source/namleh-icon.svg"))
+    .digest("hex"),
+  "1086d6ed3aacc7e2940abbfbce653308ec8baf7263eb9d77cf9f1d743f15e511",
+  "the committed Namleh icon must match the approved source asset",
+);
+assert.deepEqual(
+  pngDimensions(
+    "desktop/src-tauri/icons/namleh/source/namleh-menu-template.png",
+  ),
+  [64, 64],
+);
+for (const environment of ["production", "staging"]) {
+  const iconRoot = `desktop/src-tauri/icons/namleh/${environment}`;
+  assert.deepEqual(pngDimensions(`${iconRoot}/32x32.png`), [32, 32]);
+  assert.deepEqual(pngDimensions(`${iconRoot}/128x128.png`), [128, 128]);
+  assert.deepEqual(pngDimensions(`${iconRoot}/128x128@2x.png`), [256, 256]);
+  assert.deepEqual(
+    pngDimensions(`${iconRoot}/dmg-background.png`),
+    [1320, 1064],
+  );
+  const types = icnsTypes(`${iconRoot}/icon.icns`);
+  for (const type of [
+    "is32",
+    "il32",
+    "ic07",
+    "ic08",
+    "ic09",
+    "ic10",
+    "ic11",
+    "ic12",
+    "ic13",
+    "ic14",
+  ]) {
+    assert.ok(types.has(type), `${environment} ICNS must contain ${type}`);
+  }
+  const overlay = readJson(
+    `desktop/src-tauri/tauri.namleh.${environment}.conf.json`,
+  );
+  assert.equal(overlay.bundle.publisher, "Namleh Studios");
+  assert.match(overlay.bundle.copyright, /Block, Inc\./);
+  assert.match(overlay.bundle.copyright, /Namleh Studios/);
+  assert.deepEqual(overlay.bundle.icon, [
+    `icons/namleh/${environment}/32x32.png`,
+    `icons/namleh/${environment}/128x128.png`,
+    `icons/namleh/${environment}/128x128@2x.png`,
+    `icons/namleh/${environment}/icon.icns`,
+  ]);
+  assert.equal(
+    overlay.bundle.macOS.dmg.background,
+    `icons/namleh/${environment}/dmg-background.png`,
+  );
+  assert.deepEqual(
+    pngDimensions(`desktop/public/namleh-${environment}-app-icon@2x.png`),
+    [224, 224],
+  );
+  assert.deepEqual(
+    pngDimensions(`desktop/public/namleh-${environment}-app-icon@3x.png`),
+    [336, 336],
+  );
+}
+assert.notDeepEqual(
+  readBytes("desktop/src-tauri/icons/namleh/production/32x32.png"),
+  readBytes("desktop/src-tauri/icons/namleh/staging/32x32.png"),
+  "the staging Dock/Finder icon must remain distinct at small sizes",
+);
+assert.match(
+  read("desktop/src-tauri/icons/namleh/staging/source.svg"),
+  />S<\/text>/,
+  "staging identity must include a non-color marker",
+);
+assert.doesNotMatch(
+  read("desktop/src-tauri/icons/namleh/production/source.svg"),
+  />S<\/text>/,
+);
+
+const rendererIdentity = read("desktop/src/shared/appIdentity.ts");
+assert.ok(rendererIdentity.includes("APP_ICON_SRC"));
+for (const identity of Object.values(identities)) {
+  assert.ok(rendererIdentity.includes(identity.productName));
+  assert.ok(rendererIdentity.includes(identity.bundleIdentifier));
+  assert.ok(rendererIdentity.includes(identity.deepLinkScheme));
+}
+assert.ok(read("desktop/src/main.tsx").includes("APP_PRODUCT_NAME"));
+assert.ok(read("desktop/src-tauri/src/huddle/window.rs").includes("product_name"));
+for (const path of [
+  "desktop/src/app/App.tsx",
+  "desktop/src/features/communities/ui/HostedCommunityOnboarding.tsx",
+  "desktop/src/features/onboarding/ui/LandingBees.tsx",
+  "desktop/src/features/onboarding/ui/OnboardingChrome.tsx",
+]) {
+  assert.ok(
+    read(path).includes("NamlehAppMark"),
+    `${path} must use Namleh identity art`,
+  );
+}
+for (const path of [
+  "desktop/src/features/onboarding/ui/IdentityRecoveryPairing.tsx",
+  "desktop/src/features/profile/ui/NostrBindConsentDialog.tsx",
+  "desktop/src/features/settings/ui/MobilePairingCard.tsx",
+]) {
+  assert.ok(
+    read(path).includes("APP_ICON_SRC"),
+    `${path} must use the environment app icon`,
+  );
 }
 assert.equal(
   new Set(
@@ -156,13 +287,13 @@ for (const variable of [
   "MESH_LLM_HASH_CACHE_DIR",
 ]) {
   assert.ok(
-    rustIdentity.includes(`\"${variable}\"`),
+    rustIdentity.includes(`"${variable}"`),
     `${variable} must be scoped by the app identity`,
   );
 }
 const rustEntryPoint = read("desktop/src-tauri/src/lib.rs");
 assert.ok(rustEntryPoint.includes("configure_process_cache_environment"));
-assert.doesNotMatch(rustEntryPoint, /arg\.starts_with\(\"buzz:\/\/\"\)/);
+assert.doesNotMatch(rustEntryPoint, /arg\.starts_with\("buzz:\/\/"\)/);
 assert.ok(
   rustEntryPoint.indexOf("if reset_outcome.failed") <
     rustEntryPoint.indexOf("ensure_isolated_storage"),
@@ -184,19 +315,26 @@ for (const path of [
   "web/src/features/repos/ui/ConnectButton.tsx",
 ]) {
   const source = read(path);
-  assert.ok(source.includes("appDeepLink"), `${path} must use the Namleh scheme`);
+  assert.ok(
+    source.includes("appDeepLink"),
+    `${path} must use the Namleh scheme`,
+  );
   assert.doesNotMatch(source, /buzz:\/\//);
 }
 const webIdentity = read("web/src/shared/lib/app-identity.ts");
-assert.ok(webIdentity.includes('hostname === "buzz-staging.namlehstudios.com"'));
+assert.ok(
+  webIdentity.includes('hostname === "buzz-staging.namlehstudios.com"'),
+);
 assert.ok(webIdentity.includes('? "namleh-buzz-staging"'));
 assert.ok(webIdentity.includes('hostname === "buzz.namlehstudios.com"'));
 assert.ok(webIdentity.includes('? "namleh-buzz"'));
-assert.ok(webIdentity.includes("Cannot resolve Namleh Buzz identity for web host"));
+assert.ok(
+  webIdentity.includes("Cannot resolve Namleh Buzz identity for web host"),
+);
 assert.ok(webIdentity.includes("Namleh Buzz identity does not match web host"));
 assert.doesNotMatch(webIdentity, /\|\|\s*["']namleh-buzz["']/);
 const cliLinks = read("crates/buzz-cli/src/links.rs");
-assert.doesNotMatch(cliLinks, /format!\(\"buzz:\/\//);
+assert.doesNotMatch(cliLinks, /format!\("buzz:\/\//);
 const cliIdentity = read("crates/buzz-cli/src/app_identity.rs");
 assert.ok(cliIdentity.includes("BUZZ_DEEP_LINK_SCHEME"));
 assert.ok(cliIdentity.includes("BUZZ_APP_BUNDLE_IDENTIFIER"));
@@ -204,10 +342,7 @@ assert.ok(cliIdentity.includes("namleh-buzz-staging"));
 const channelTemplateProductionSource = read(
   "crates/buzz-cli/src/commands/channel_templates.rs",
 ).split("#[cfg(test)]")[0];
-assert.doesNotMatch(
-  channelTemplateProductionSource,
-  /xyz\.block\.buzz\.app/,
-);
+assert.doesNotMatch(channelTemplateProductionSource, /xyz\.block\.buzz\.app/);
 
 const infoPlist = read("desktop/src-tauri/Info.plist");
 assert.doesNotMatch(infoPlist, /<key>CFBundle(?:DisplayName|Name)<\/key>/);
@@ -233,7 +368,10 @@ for (const token of [
   "TAURI_SIGNING_PRIVATE_KEY",
   "APPLE_SIGNING_IDENTITY",
 ]) {
-  assert.ok(releaseRunner.includes(token), `release runner must consume ${token}`);
+  assert.ok(
+    releaseRunner.includes(token),
+    `release runner must consume ${token}`,
+  );
 }
 assert.doesNotMatch(releaseRunner, /--no-sign/);
 
@@ -321,6 +459,17 @@ try {
       assert.deepEqual(generated.plugins["deep-link"].desktop.schemes, [
         identity.deepLinkScheme,
       ]);
+      assert.equal(generated.bundle.publisher, "Namleh Studios");
+      assert.deepEqual(generated.bundle.icon, [
+        `icons/namleh/${environment}/32x32.png`,
+        `icons/namleh/${environment}/128x128.png`,
+        `icons/namleh/${environment}/128x128@2x.png`,
+        `icons/namleh/${environment}/icon.icns`,
+      ]);
+      assert.equal(
+        generated.bundle.macOS.dmg.background,
+        `icons/namleh/${environment}/dmg-background.png`,
+      );
       assert.equal(
         JSON.stringify(generated).includes(
           otherIdentity.updaterManifestNamespace,

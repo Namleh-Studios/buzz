@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App } from "@/app/App";
 import { RootErrorBoundary } from "@/app/RootErrorBoundary";
 import { NostrBindConsentDialog } from "@/features/profile/ui/NostrBindConsentDialog";
@@ -19,7 +21,7 @@ import { Toaster } from "@/shared/ui/sonner";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { recoverLocalStorageQuotaOnStartup } from "@/shared/lib/localStorageQuota";
 import { startLocalStorageSweep } from "@/shared/lib/localStorageSweep";
-import { NAMLEH_APP_ENVIRONMENT } from "@/shared/appIdentity";
+import { APP_PRODUCT_NAME, NAMLEH_APP_ENVIRONMENT } from "@/shared/appIdentity";
 
 type E2eWindow = Window & {
   __BUZZ_E2E__?: unknown;
@@ -34,7 +36,7 @@ function StagingIndicator() {
   if (NAMLEH_APP_ENVIRONMENT !== "staging") return null;
   return (
     <div
-      className="pointer-events-none fixed top-2 left-1/2 z-[100] -translate-x-1/2 rounded-full border border-black/25 bg-warning px-3 py-1 font-semibold text-black text-xs shadow-md"
+      className="pointer-events-none fixed top-[4px] left-1/2 z-[100] -translate-x-1/2 rounded-full border border-black/30 bg-[var(--namleh-staging-background)] px-3 py-[2px] font-semibold text-[var(--namleh-staging-foreground)] text-xs leading-none shadow-md"
       data-testid="staging-indicator"
     >
       STAGING
@@ -62,7 +64,7 @@ function resetDevWebviewStateFromUrl() {
 }
 
 function configureDevE2eBridgeFromUrl() {
-  if (!import.meta.env.DEV) {
+  if (!(import.meta.env.DEV || import.meta.env.MODE === "e2e")) {
     return;
   }
 
@@ -134,6 +136,14 @@ async function installE2eBridgeIfConfigured() {
 }
 
 async function bootstrap() {
+  document.title = APP_PRODUCT_NAME;
+  if (isTauri()) {
+    void getCurrentWindow()
+      .setTitle(APP_PRODUCT_NAME)
+      .catch((error) => {
+        console.warn("native window title unavailable", error);
+      });
+  }
   resetDevWebviewStateFromUrl();
   configureDevE2eBridgeFromUrl();
   recoverLocalStorageQuotaOnStartup();

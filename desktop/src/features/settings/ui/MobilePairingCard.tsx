@@ -15,6 +15,7 @@ import {
   confirmPairingSas,
   startPairing,
 } from "@/shared/api/tauri";
+import { APP_ICON_SRC } from "@/shared/appIdentity";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { StyledQrCode } from "@/shared/ui/styled-qr-code";
@@ -454,7 +455,7 @@ export function MobilePairingCard({
               ) : step === "qr" && qrUri ? (
                 <StyledQrCode
                   animate
-                  centerImageSrc="/app-icon@2x.png"
+                  centerImageSrc={APP_ICON_SRC}
                   data-testid="mobile-pairing-qr"
                   size={240}
                   title="Mobile pairing QR code"

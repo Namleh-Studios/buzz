@@ -12,6 +12,11 @@ import { listenForNostrBindDeepLinks } from "@/shared/deep-link";
 import { OnboardingSlideTransition } from "@/features/onboarding/ui/OnboardingSlideTransition";
 import { buildNostrBindCallbackUrl } from "@/features/profile/lib/nostrBindCallback";
 import { signNostrIdentityBinding } from "@/features/profile/lib/nostrIdentityBinding";
+import {
+  APP_ICON_SRC,
+  APP_ICON_SRC_SET,
+  APP_PRODUCT_NAME,
+} from "@/shared/appIdentity";
 import { cn } from "@/shared/lib/cn";
 import { useSystemColorScheme } from "@/shared/theme/useSystemColorScheme";
 import { Button } from "@/shared/ui/button";
@@ -652,10 +657,10 @@ export function NostrBindConsentDialog() {
             <StartupWindowDragRegion />
             <div className="m-auto flex w-full max-w-[500px] flex-col items-center text-center">
               <img
-                alt="Buzz"
+                alt={APP_PRODUCT_NAME}
                 className="h-14 w-14 rounded-xl shadow-xs"
-                src="/app-icon@2x.png"
-                srcSet="/app-icon@2x.png 1x, /app-icon@3x.png 2x"
+                src={APP_ICON_SRC}
+                srcSet={APP_ICON_SRC_SET}
               />
 
               {signedResponse ? (
