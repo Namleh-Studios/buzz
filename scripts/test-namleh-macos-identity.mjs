@@ -201,6 +201,7 @@ assert.doesNotMatch(
 const rendererIdentity = read("desktop/src/shared/appIdentity.ts");
 assert.ok(rendererIdentity.includes("APP_ICON_SRC"));
 assert.ok(rendererIdentity.includes("Object.hasOwn"));
+assert.ok(rendererIdentity.includes("import.meta.env?.VITE_NAMLEH_APP_ENV"));
 for (const identity of Object.values(identities)) {
   assert.ok(rendererIdentity.includes(identity.productName));
   assert.ok(rendererIdentity.includes(identity.bundleIdentifier));

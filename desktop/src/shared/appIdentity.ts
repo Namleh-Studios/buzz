@@ -21,14 +21,8 @@ const ENVIRONMENT_IDENTITIES: Record<
   },
 };
 
-const viteEnvironment = (
-  import.meta as ImportMeta & {
-    env?: Record<string, string | boolean | undefined>;
-  }
-).env;
-
 const configuredEnvironment =
-  viteEnvironment?.VITE_NAMLEH_APP_ENV ?? "development";
+  import.meta.env?.VITE_NAMLEH_APP_ENV ?? "development";
 if (!Object.hasOwn(ENVIRONMENT_IDENTITIES, configuredEnvironment)) {
   throw new Error(`Invalid VITE_NAMLEH_APP_ENV: ${configuredEnvironment}`);
 }
@@ -48,7 +42,7 @@ export const APP_ICON_SRC_SET =
   `/namleh-${appIconEnvironment}-app-icon@2x.png 2x, /namleh-${appIconEnvironment}-app-icon@3x.png 3x` as const;
 export const LEGACY_BUZZ_DEEP_LINK_PROTOCOL = "buzz:";
 
-const configuredScheme = viteEnvironment?.VITE_NAMLEH_DEEP_LINK_SCHEME;
+const configuredScheme = import.meta.env?.VITE_NAMLEH_DEEP_LINK_SCHEME;
 if (configuredScheme && configuredScheme !== APP_DEEP_LINK_SCHEME) {
   throw new Error(
     `VITE_NAMLEH_DEEP_LINK_SCHEME ${configuredScheme} does not match ${NAMLEH_APP_ENVIRONMENT}`,
