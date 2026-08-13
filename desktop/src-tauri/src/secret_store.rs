@@ -324,8 +324,18 @@ impl SecretStore {
     /// keyring service only when macOS reports the entitlement unavailable.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn read_blob_raw(&self) -> Result<Option<Vec<u8>>, String> {
+        if is_development() {
+            if let Some(bytes) = self.read_blob_raw_keyring()? {
+                return Ok(Some(bytes));
+            }
+        }
         match generic_password(dpk_opts(&self.service, BLOB_KEY)) {
-            Ok(bytes) => Ok(Some(bytes)),
+            Ok(bytes) => {
+                if is_development() {
+                    self.write_blob_raw_keyring(&bytes)?;
+                }
+                Ok(Some(bytes))
+            }
             Err(ref error)
                 if is_development() && (is_not_found(error) || is_dpk_unavailable(error)) =>
             {
@@ -448,6 +458,7 @@ impl SecretStore {
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn write_blob_raw(&self, bytes: &[u8]) -> Result<(), String> {
         match set_generic_password_options(bytes, dpk_opts(&self.service, BLOB_KEY)) {
+            Ok(()) if is_development() => self.write_blob_raw_keyring(bytes),
             Ok(()) => Ok(()),
             Err(ref error) if is_development() && is_dpk_unavailable(error) => {
                 self.write_blob_raw_keyring(bytes)
@@ -784,7 +795,9 @@ impl SecretStore {
                     match delete_generic_password_options(dpk_opts(&self.service, key)) {
                         Ok(()) => {}
                         Err(ref e) if is_not_found(e) => {}
-                        Err(ref e) if is_dpk_unavailable(e) => {}
+                        Err(ref e) if is_dpk_unavailable(e) => {
+                            return Err(format!("dpk unavailable deleting {key}: {e}"));
+                        }
                         Err(e) => return Err(format!("dpk per-key delete {key}: {e}")),
                     }
                 }
@@ -808,7 +821,9 @@ impl SecretStore {
                 match delete_generic_password_options(dpk_opts(&self.service, BLOB_KEY)) {
                     Ok(()) => {}
                     Err(ref e) if is_not_found(e) => {}
-                    Err(ref e) if is_dpk_unavailable(e) => {}
+                    Err(ref e) if is_dpk_unavailable(e) => {
+                        return Err(format!("dpk unavailable deleting blob: {e}"));
+                    }
                     Err(e) => return Err(format!("dpk blob delete: {e}")),
                 }
             }
@@ -843,9 +858,9 @@ impl SecretStore {
     /// that `load("identity")` → `migrate_legacy_key` can consume:
     /// main blob, DPK blob (`BLOB_KEY`), and per-key `"identity"`.
     ///
-    /// Returns `true` when all three shapes are absent (or inaccessible in an
-    /// expected way), `false` when any entry is found or the keychain is
-    /// unavailable (fail-closed).
+    /// Returns `true` only when all three shapes are proven absent. An
+    /// inaccessible keychain fails closed so reset cannot strand credentials
+    /// that a later entitled launch could read.
     pub fn verify_fully_wiped(&self) -> bool {
         #[cfg(feature = "system-keyring")]
         {
@@ -872,9 +887,6 @@ impl SecretStore {
             {
                 match generic_password(dpk_opts(&self.service, BLOB_KEY)) {
                     Err(ref e) if is_not_found(e) => {}
-                    // dpk-unavailable is symmetric with load(): if load() can't
-                    // consume DPK in this state, a surviving entry is harmless.
-                    Err(ref e) if is_dpk_unavailable(e) => {}
                     Ok(_) => return false,
                     // Any other error → fail closed (not proof of absence).
                     Err(_) => return false,
@@ -882,9 +894,6 @@ impl SecretStore {
                 // 4. Per-key DPK "identity" (macOS only).
                 match generic_password(dpk_opts(&self.service, "identity")) {
                     Err(ref e) if is_not_found(e) => {}
-                    // dpk-unavailable: symmetric with load() — if load() can't
-                    // read DPK, a surviving entry can't resurrect identity.
-                    Err(ref e) if is_dpk_unavailable(e) => {}
                     Ok(_) => return false,
                     // Any other error → fail closed.
                     Err(_) => return false,

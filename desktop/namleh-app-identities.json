@@ -18,6 +18,7 @@
     "updaterAuthorizationAudience": null,
     "updaterPublicKeyEnv": null,
     "updaterPrivateKeyEnv": null,
+    "updaterPrivateKeyPasswordEnv": null,
     "updaterEndpointEnv": null,
     "updaterEndpoint": null,
     "signingIdentity": "Developer ID Application: STEVEN EDWARD HELMAN (962M5A4PL7)"
@@ -41,6 +42,7 @@
     "updaterAuthorizationAudience": "namleh-buzz-updates:staging",
     "updaterPublicKeyEnv": "NAMLEH_STAGING_UPDATER_PUBLIC_KEY",
     "updaterPrivateKeyEnv": "NAMLEH_STAGING_UPDATER_PRIVATE_KEY",
+    "updaterPrivateKeyPasswordEnv": "NAMLEH_STAGING_UPDATER_PRIVATE_KEY_PASSWORD",
     "updaterEndpointEnv": "NAMLEH_STAGING_UPDATER_ENDPOINT",
     "updaterEndpoint": "https://updates.namlehstudios.com/staging/namleh-buzz-staging/latest.json",
     "signingIdentity": "Developer ID Application: STEVEN EDWARD HELMAN (962M5A4PL7)"
@@ -64,6 +66,7 @@
     "updaterAuthorizationAudience": "namleh-buzz-updates:production",
     "updaterPublicKeyEnv": "NAMLEH_PRODUCTION_UPDATER_PUBLIC_KEY",
     "updaterPrivateKeyEnv": "NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY",
+    "updaterPrivateKeyPasswordEnv": "NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY_PASSWORD",
     "updaterEndpointEnv": "NAMLEH_PRODUCTION_UPDATER_ENDPOINT",
     "updaterEndpoint": "https://updates.namlehstudios.com/production/namleh-buzz-production/latest.json",
     "signingIdentity": "Developer ID Application: STEVEN EDWARD HELMAN (962M5A4PL7)"

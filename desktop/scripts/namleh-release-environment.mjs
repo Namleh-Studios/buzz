@@ -5,6 +5,7 @@ export function createNamlehReleaseEnvironment({
   otherIdentity,
   updaterPublicKey,
   updaterPrivateKey,
+  updaterPrivateKeyPassword,
   updaterEndpoint,
   releaseVersion,
 }) {
@@ -12,6 +13,7 @@ export function createNamlehReleaseEnvironment({
   for (const variable of [
     otherIdentity.updaterPublicKeyEnv,
     otherIdentity.updaterPrivateKeyEnv,
+    otherIdentity.updaterPrivateKeyPasswordEnv,
     otherIdentity.updaterEndpointEnv,
   ]) {
     delete buildEnvironment[variable];
@@ -24,6 +26,7 @@ export function createNamlehReleaseEnvironment({
     BUZZ_UPDATER_PUBLIC_KEY: updaterPublicKey,
     BUZZ_UPDATER_ENDPOINT: updaterEndpoint,
     TAURI_SIGNING_PRIVATE_KEY: updaterPrivateKey,
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: updaterPrivateKeyPassword,
     APPLE_SIGNING_IDENTITY: identity.signingIdentity,
     NAMLEH_UPDATER_AUTHORIZATION_AUDIENCE:
       identity.updaterAuthorizationAudience,

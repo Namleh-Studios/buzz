@@ -26,10 +26,15 @@ const baseConfig = JSON.parse(
 const releaseVersion = baseConfig.version;
 const updaterPublicKey = process.env[identity.updaterPublicKeyEnv]?.trim();
 const updaterPrivateKey = process.env[identity.updaterPrivateKeyEnv]?.trim();
+const updaterPrivateKeyPassword =
+  process.env[identity.updaterPrivateKeyPasswordEnv]?.trim();
 const updaterEndpoint = process.env[identity.updaterEndpointEnv]?.trim();
 const missing = [];
 if (!updaterPublicKey) missing.push(identity.updaterPublicKeyEnv);
 if (!updaterPrivateKey) missing.push(identity.updaterPrivateKeyEnv);
+if (!updaterPrivateKeyPassword) {
+  missing.push(identity.updaterPrivateKeyPasswordEnv);
+}
 if (!updaterEndpoint) missing.push(identity.updaterEndpointEnv);
 if (missing.length > 0) {
   console.error(
@@ -45,6 +50,7 @@ const buildEnvironment = createNamlehReleaseEnvironment({
   otherIdentity,
   updaterPublicKey,
   updaterPrivateKey,
+  updaterPrivateKeyPassword,
   updaterEndpoint,
   releaseVersion,
 });

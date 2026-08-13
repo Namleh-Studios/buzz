@@ -78,6 +78,7 @@ for (const environment of ["staging", "production"]) {
     "updaterAuthorizationAudience",
     "updaterPublicKeyEnv",
     "updaterPrivateKeyEnv",
+    "updaterPrivateKeyPasswordEnv",
     "updaterEndpointEnv",
     "updaterEndpoint",
     "signingIdentity",
@@ -91,6 +92,7 @@ for (const field of [
   "updaterAuthorizationAudience",
   "updaterPublicKeyEnv",
   "updaterPrivateKeyEnv",
+  "updaterPrivateKeyPasswordEnv",
   "updaterEndpointEnv",
   "updaterEndpoint",
 ]) {
@@ -158,10 +160,14 @@ for (const variable of [
     `${variable} must be scoped by the app identity`,
   );
 }
-
 const rustEntryPoint = read("desktop/src-tauri/src/lib.rs");
 assert.ok(rustEntryPoint.includes("configure_process_cache_environment"));
 assert.doesNotMatch(rustEntryPoint, /arg\.starts_with\(\"buzz:\/\/\"\)/);
+assert.ok(
+  rustEntryPoint.indexOf("if reset_outcome.failed") <
+    rustEntryPoint.indexOf("ensure_isolated_storage"),
+  "isolated storage must be recreated only after reset succeeds",
+);
 
 for (const path of [
   "web/src/features/invite/ui/InvitePage.tsx",
@@ -173,10 +179,11 @@ for (const path of [
 }
 const webIdentity = read("web/src/shared/lib/app-identity.ts");
 assert.ok(webIdentity.includes('hostname === "buzz-staging.namlehstudios.com"'));
-assert.ok(webIdentity.includes('return "namleh-buzz-staging"'));
+assert.ok(webIdentity.includes('? "namleh-buzz-staging"'));
 assert.ok(webIdentity.includes('hostname === "buzz.namlehstudios.com"'));
-assert.ok(webIdentity.includes('return "namleh-buzz"'));
+assert.ok(webIdentity.includes('? "namleh-buzz"'));
 assert.ok(webIdentity.includes("Cannot resolve Namleh Buzz identity for web host"));
+assert.ok(webIdentity.includes("Namleh Buzz identity does not match web host"));
 assert.doesNotMatch(webIdentity, /\|\|\s*["']namleh-buzz["']/);
 const cliLinks = read("crates/buzz-cli/src/links.rs");
 assert.doesNotMatch(cliLinks, /format!\(\"buzz:\/\//);
@@ -226,9 +233,11 @@ const sanitizedStagingEnvironment = createNamlehReleaseEnvironment({
   parentEnvironment: {
     [stagingIdentity.updaterPublicKeyEnv]: "staging-public",
     [stagingIdentity.updaterPrivateKeyEnv]: "staging-private",
+    [stagingIdentity.updaterPrivateKeyPasswordEnv]: "staging-password",
     [stagingIdentity.updaterEndpointEnv]: stagingIdentity.updaterEndpoint,
     [productionIdentity.updaterPublicKeyEnv]: "production-public",
     [productionIdentity.updaterPrivateKeyEnv]: "production-private",
+    [productionIdentity.updaterPrivateKeyPasswordEnv]: "production-password",
     [productionIdentity.updaterEndpointEnv]: productionIdentity.updaterEndpoint,
   },
   environment: "staging",
@@ -236,12 +245,14 @@ const sanitizedStagingEnvironment = createNamlehReleaseEnvironment({
   otherIdentity: productionIdentity,
   updaterPublicKey: "staging-public",
   updaterPrivateKey: "staging-private",
+  updaterPrivateKeyPassword: "staging-password",
   updaterEndpoint: stagingIdentity.updaterEndpoint,
   releaseVersion: "0.5.8",
 });
 for (const variable of [
   productionIdentity.updaterPublicKeyEnv,
   productionIdentity.updaterPrivateKeyEnv,
+  productionIdentity.updaterPrivateKeyPasswordEnv,
   productionIdentity.updaterEndpointEnv,
 ]) {
   assert.equal(
@@ -250,6 +261,10 @@ for (const variable of [
     `staging child environment must not inherit ${variable}`,
   );
 }
+assert.equal(
+  sanitizedStagingEnvironment.TAURI_SIGNING_PRIVATE_KEY_PASSWORD,
+  "staging-password",
+);
 
 const generatedConfigs = [];
 try {

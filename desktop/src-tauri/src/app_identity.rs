@@ -85,7 +85,11 @@ pub(crate) fn isolated_storage_paths(root: &Path) -> [PathBuf; 2] {
 
 pub(crate) fn ensure_isolated_storage() -> Result<(), String> {
     let root = dirs::data_dir().ok_or("cannot resolve platform data directory")?;
-    for path in isolated_storage_paths(&root) {
+    ensure_isolated_storage_under(&root)
+}
+
+fn ensure_isolated_storage_under(root: &Path) -> Result<(), String> {
+    for path in isolated_storage_paths(root) {
         std::fs::create_dir_all(&path)
             .map_err(|error| format!("create isolated storage {}: {error}", path.display()))?;
     }
@@ -211,5 +215,26 @@ mod tests {
         assert!(paths
             .iter()
             .all(|path| !path.to_string_lossy().contains("xyz.block.buzz.app")));
+    }
+
+    #[test]
+    fn isolated_storage_survives_upgrade_and_rollback_initialization() {
+        let temp = tempfile::tempdir().unwrap();
+        super::ensure_isolated_storage_under(temp.path()).unwrap();
+        let paths = super::isolated_storage_paths(temp.path());
+        std::fs::write(paths[0].join("provider.json"), b"provider").unwrap();
+        std::fs::write(paths[1].join("checkpoint.json"), b"checkpoint").unwrap();
+
+        for _version in ["0.5.8", "0.5.9", "0.5.8"] {
+            super::ensure_isolated_storage_under(temp.path()).unwrap();
+            assert_eq!(
+                std::fs::read(paths[0].join("provider.json")).unwrap(),
+                b"provider"
+            );
+            assert_eq!(
+                std::fs::read(paths[1].join("checkpoint.json")).unwrap(),
+                b"checkpoint"
+            );
+        }
     }
 }

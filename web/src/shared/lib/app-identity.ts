@@ -9,16 +9,24 @@ export function resolveAppDeepLinkScheme(
   hostname: string,
 ): string {
   const configured = configuredScheme?.trim();
+  const hostedScheme =
+    hostname === "buzz-staging.namlehstudios.com"
+      ? "namleh-buzz-staging"
+      : hostname === "buzz.namlehstudios.com"
+        ? "namleh-buzz"
+        : undefined;
   if (configured) {
     if (!NAMLEH_DEEP_LINK_SCHEMES.has(configured)) {
       throw new Error(`Invalid VITE_NAMLEH_DEEP_LINK_SCHEME: ${configured}`);
     }
+    if (hostedScheme && configured !== hostedScheme) {
+      throw new Error(
+        `Namleh Buzz identity does not match web host: ${hostname}`,
+      );
+    }
     return configured;
   }
-  if (hostname === "buzz-staging.namlehstudios.com") {
-    return "namleh-buzz-staging";
-  }
-  if (hostname === "buzz.namlehstudios.com") return "namleh-buzz";
+  if (hostedScheme) return hostedScheme;
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     return "namleh-buzz-dev";
   }

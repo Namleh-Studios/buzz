@@ -316,9 +316,6 @@ pub fn run() {
             let app_handle = app.handle().clone();
             app_identity::validate_runtime_config(&app_handle)
                 .map_err(|error| std::io::Error::other(format!("invalid app identity: {error}")))?;
-            app_identity::ensure_isolated_storage().map_err(|error| {
-                std::io::Error::other(format!("initialize isolated app storage: {error}"))
-            })?;
             #[cfg(target_os = "macos")]
             {
                 tray_menu::init(&app_handle)?;
@@ -353,6 +350,10 @@ pub fn run() {
                     .store(true, std::sync::atomic::Ordering::Release);
                 return Ok(());
             }
+
+            app_identity::ensure_isolated_storage().map_err(|error| {
+                std::io::Error::other(format!("initialize isolated app storage: {error}"))
+            })?;
 
             // Run all pre-identity data migrations before state loads from disk.
             if reset_outcome.completed {
