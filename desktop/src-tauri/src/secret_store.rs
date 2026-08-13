@@ -12,6 +12,7 @@ pub enum KeyringProbe {
 }
 
 const BLOB_KEY: &str = "secrets";
+#[cfg(all(feature = "system-keyring", target_os = "macos"))]
 const DPK_RESET_PENDING_KEY: &str = "dpk-reset-pending";
 fn blob_lockfile_path(service: &str) -> PathBuf {
     #[cfg(unix)]
@@ -199,7 +200,7 @@ fn is_development() -> bool {
     crate::app_identity::current().environment == crate::app_identity::AppEnvironment::Development
 }
 
-#[cfg(feature = "system-keyring")]
+#[cfg(all(feature = "system-keyring", target_os = "macos"))]
 fn write_development_mirrors<L, D>(write_legacy: L, write_dpk: D) -> Result<(), String>
 where
     L: FnOnce() -> Result<(), String>,
