@@ -15,6 +15,8 @@ const ZERO_WIDTH_JOINER: char = '\u{200D}';
 
 static EXTENDED_PICTOGRAPHIC: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"^\p{Extended_Pictographic}$").ok());
+static NON_REVIEWABLE_FORMAT: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(r"^[\p{Cf}\p{Zl}\p{Zp}]$").ok());
 
 /// Validate the human-visible fields of an agent definition.
 pub(crate) fn validate_agent_definition_text(
@@ -70,7 +72,8 @@ fn validate_visible_text(
         let allowed_layout_control = allow_layout_controls && matches!(character, '\n' | '\t');
         let allowed_emoji_format = is_allowed_emoji_format(&characters, index);
         if (!allowed_layout_control && character.is_control())
-            || (is_default_ignorable(character) && !allowed_emoji_format)
+            || ((is_default_ignorable(character) || is_non_reviewable_format(character))
+                && !allowed_emoji_format)
         {
             return Err(format!(
                 "{label} contains prohibited invisible or formatting character U+{:04X}",
@@ -121,6 +124,14 @@ fn is_extended_pictographic(character: char) -> bool {
     let mut encoded = [0; 4];
     let character = character.encode_utf8(&mut encoded);
     EXTENDED_PICTOGRAPHIC
+        .as_ref()
+        .is_some_and(|pattern| pattern.is_match(character))
+}
+
+fn is_non_reviewable_format(character: char) -> bool {
+    let mut encoded = [0; 4];
+    let character = character.encode_utf8(&mut encoded);
+    NON_REVIEWABLE_FORMAT
         .as_ref()
         .is_some_and(|pattern| pattern.is_match(character))
 }
@@ -189,6 +200,25 @@ mod tests {
             '\u{2066}',
             '\u{3164}',
             '\u{E007F}',
+        ] {
+            let name = format!("Review{character}er");
+            let prompt = format!("Review code.{character}");
+            assert!(validate_agent_definition_text(&name, "Review code.").is_err());
+            assert!(validate_agent_definition_text("Reviewer", &prompt).is_err());
+        }
+    }
+
+    #[test]
+    fn rejects_other_unicode_format_and_separator_characters() {
+        for character in [
+            '\u{0600}',
+            '\u{2028}',
+            '\u{2029}',
+            '\u{FFF9}',
+            '\u{FFFA}',
+            '\u{FFFB}',
+            '\u{110BD}',
+            '\u{13430}',
         ] {
             let name = format!("Review{character}er");
             let prompt = format!("Review code.{character}");

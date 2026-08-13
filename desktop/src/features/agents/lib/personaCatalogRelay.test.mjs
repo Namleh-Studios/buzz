@@ -267,6 +267,40 @@ test("catalog rejects invisible or bidirectional formatting characters", () => {
   }
 });
 
+test("catalog rejects other Unicode format and separator characters", () => {
+  for (const [index, character] of [
+    "\u0600",
+    "\u2028",
+    "\u2029",
+    "\ufff9",
+    "\ufffa",
+    "\ufffb",
+    "\u{110bd}",
+    "\u{13430}",
+  ].entries()) {
+    assert.deepEqual(
+      catalogPublicationsFromEvents([
+        personaEvent({
+          createdAt: index + 1,
+          displayName: `Review${character}er`,
+          id: `unsafe-format-name-${index}`,
+        }),
+      ]),
+      [],
+    );
+    assert.deepEqual(
+      catalogPublicationsFromEvents([
+        personaEvent({
+          createdAt: index + 1,
+          id: `unsafe-format-prompt-${index}`,
+          systemPrompt: `Review code.${character}`,
+        }),
+      ]),
+      [],
+    );
+  }
+});
+
 test("catalog keeps rendered emoji sequences in names and instructions", () => {
   for (const [index, emoji] of [
     "❤️",

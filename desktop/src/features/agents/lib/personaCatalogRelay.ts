@@ -46,6 +46,7 @@ const MAX_AGENT_SYSTEM_PROMPT_BYTES = 64 * 1_024;
 const EMOJI_VARIATION_SELECTOR = 0xfe0f;
 const ZERO_WIDTH_JOINER = 0x200d;
 const EXTENDED_PICTOGRAPHIC_RE = /^\p{Extended_Pictographic}$/u;
+const NON_REVIEWABLE_FORMAT_RE = /^[\p{Cf}\p{Zl}\p{Zp}]$/u;
 
 function isProhibitedAgentTextCharacter(
   characters: readonly string[],
@@ -63,6 +64,7 @@ function isProhibitedAgentTextCharacter(
     allowLayoutControls && (codePoint === 0x09 || codePoint === 0x0a);
   if (isControl && !isAllowedLayoutControl) return true;
   if (isAllowedEmojiFormatCharacter(characters, index)) return false;
+  if (NON_REVIEWABLE_FORMAT_RE.test(character)) return true;
 
   return (
     codePoint === 0x00ad ||
