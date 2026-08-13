@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
+import { APP_ICON_SRC } from "../../src/shared/appIdentity";
 import { installMockBridge } from "../helpers/bridge";
 import { waitForAnimations } from "../helpers/animations";
 
@@ -163,10 +164,7 @@ test("mobile pairing starts on demand and reveals the QR code", async ({
   ).toHaveCSS("animation-delay", "0.189s");
   await expect(copyButton).toHaveCSS("animation-name", "enter");
   await expect(copyButton).toHaveCSS("animation-duration", "0.25s");
-  await expect(qrCode.locator("image")).toHaveAttribute(
-    "href",
-    "/app-icon@2x.png",
-  );
+  await expect(qrCode.locator("image")).toHaveAttribute("href", APP_ICON_SRC);
   await waitForAnimations(page);
   const qrBox = await qrContainer.boundingBox();
   const copyBox = await copyButton.boundingBox();
