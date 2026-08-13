@@ -3,6 +3,8 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { createNamlehReleaseEnvironment } from "../desktop/scripts/namleh-release-environment.mjs";
+
 const root = resolve(import.meta.dirname, "..");
 const readJson = (path) =>
   JSON.parse(readFileSync(resolve(root, path), "utf8"));
@@ -52,17 +54,16 @@ for (const environment of environments) {
   assert.ok(identity.providerBindingPath.startsWith(identity.bundleIdentifier));
   assert.ok(identity.browserCheckpointPath.startsWith(identity.bundleIdentifier));
 }
-assert.equal(identities.development.keychainAccessGroup, null);
 assert.equal(
   new Set(
-    ["staging", "production"].map(
+    environments.map(
       (environment) => identities[environment].keychainAccessGroup,
     ),
   ).size,
-  2,
-  "signed environments must use distinct Keychain access groups",
+  environments.length,
+  "all environments must use distinct Keychain access groups",
 );
-for (const environment of ["staging", "production"]) {
+for (const environment of environments) {
   assert.match(
     identities[environment].keychainAccessGroup,
     /^962M5A4PL7\.com\.namlehstudios\.buzz(?:\.|$)/,
@@ -170,9 +171,26 @@ for (const path of [
   assert.ok(source.includes("appDeepLink"), `${path} must use the Namleh scheme`);
   assert.doesNotMatch(source, /buzz:\/\//);
 }
+const webIdentity = read("web/src/shared/lib/app-identity.ts");
+assert.ok(webIdentity.includes('hostname === "buzz-staging.namlehstudios.com"'));
+assert.ok(webIdentity.includes('return "namleh-buzz-staging"'));
+assert.ok(webIdentity.includes('hostname === "buzz.namlehstudios.com"'));
+assert.ok(webIdentity.includes('return "namleh-buzz"'));
+assert.ok(webIdentity.includes("Cannot resolve Namleh Buzz identity for web host"));
+assert.doesNotMatch(webIdentity, /\|\|\s*["']namleh-buzz["']/);
 const cliLinks = read("crates/buzz-cli/src/links.rs");
-assert.ok(cliLinks.includes("BUZZ_DEEP_LINK_SCHEME"));
 assert.doesNotMatch(cliLinks, /format!\(\"buzz:\/\//);
+const cliIdentity = read("crates/buzz-cli/src/app_identity.rs");
+assert.ok(cliIdentity.includes("BUZZ_DEEP_LINK_SCHEME"));
+assert.ok(cliIdentity.includes("BUZZ_APP_BUNDLE_IDENTIFIER"));
+assert.ok(cliIdentity.includes("namleh-buzz-staging"));
+const channelTemplateProductionSource = read(
+  "crates/buzz-cli/src/commands/channel_templates.rs",
+).split("#[cfg(test)]")[0];
+assert.doesNotMatch(
+  channelTemplateProductionSource,
+  /xyz\.block\.buzz\.app/,
+);
 
 const infoPlist = read("desktop/src-tauri/Info.plist");
 assert.doesNotMatch(infoPlist, /<key>CFBundle(?:DisplayName|Name)<\/key>/);
@@ -186,7 +204,9 @@ for (const field of [
 ]) {
   assert.ok(releaseBuilder.includes(field));
 }
-const releaseRunner = read("desktop/scripts/run-namleh-tauri.mjs");
+const releaseRunner = `${read("desktop/scripts/run-namleh-tauri.mjs")}\n${read(
+  "desktop/scripts/namleh-release-environment.mjs",
+)}`;
 for (const token of [
   "updaterPrivateKeyEnv",
   "updaterAuthorizationAudience",
@@ -200,28 +220,35 @@ for (const token of [
 }
 assert.doesNotMatch(releaseRunner, /--no-sign/);
 
-const stableIdentityFields = [
-  "bundleIdentifier",
-  "deepLinkScheme",
-  "keyringService",
-  "keychainAccessGroup",
-  "appDataNamespace",
-  "cacheNamespace",
-  "logNamespace",
-  "providerBindingPath",
-  "browserCheckpointPath",
-  "nestDirectory",
-  "managedRuntimeDirectory",
-  "cliLinkName",
-];
-for (const environment of environments) {
-  const fingerprints = ["0.5.8", "0.5.9", "0.5.8"].map(() =>
-    Object.fromEntries(
-      stableIdentityFields.map((field) => [field, identities[environment][field]]),
-    ),
+const stagingIdentity = identities.staging;
+const productionIdentity = identities.production;
+const sanitizedStagingEnvironment = createNamlehReleaseEnvironment({
+  parentEnvironment: {
+    [stagingIdentity.updaterPublicKeyEnv]: "staging-public",
+    [stagingIdentity.updaterPrivateKeyEnv]: "staging-private",
+    [stagingIdentity.updaterEndpointEnv]: stagingIdentity.updaterEndpoint,
+    [productionIdentity.updaterPublicKeyEnv]: "production-public",
+    [productionIdentity.updaterPrivateKeyEnv]: "production-private",
+    [productionIdentity.updaterEndpointEnv]: productionIdentity.updaterEndpoint,
+  },
+  environment: "staging",
+  identity: stagingIdentity,
+  otherIdentity: productionIdentity,
+  updaterPublicKey: "staging-public",
+  updaterPrivateKey: "staging-private",
+  updaterEndpoint: stagingIdentity.updaterEndpoint,
+  releaseVersion: "0.5.8",
+});
+for (const variable of [
+  productionIdentity.updaterPublicKeyEnv,
+  productionIdentity.updaterPrivateKeyEnv,
+  productionIdentity.updaterEndpointEnv,
+]) {
+  assert.equal(
+    sanitizedStagingEnvironment[variable],
+    undefined,
+    `staging child environment must not inherit ${variable}`,
   );
-  assert.deepEqual(fingerprints[0], fingerprints[1]);
-  assert.deepEqual(fingerprints[1], fingerprints[2]);
 }
 
 const generatedConfigs = [];
@@ -238,39 +265,53 @@ try {
       `desktop/src-tauri/tauri.namleh.${environment}.release.conf.json`,
     );
     generatedConfigs.push(generatedPath);
-    const result = spawnSync(
-      process.execPath,
-      [
-        resolve(root, "desktop/scripts/build-namleh-release-config.mjs"),
-        environment,
-      ],
-      {
-        cwd: root,
-        env: {
-          ...process.env,
-          [identity.updaterPublicKeyEnv]: publicKey,
-          [identity.updaterEndpointEnv]: endpoint,
+    const transition = [];
+    for (const version of ["0.5.8", "0.5.9", "0.5.8"]) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          resolve(root, "desktop/scripts/build-namleh-release-config.mjs"),
+          environment,
+        ],
+        {
+          cwd: root,
+          env: {
+            ...process.env,
+            NAMLEH_RELEASE_VERSION: version,
+            [identity.updaterPublicKeyEnv]: publicKey,
+            [identity.updaterEndpointEnv]: endpoint,
+          },
+          encoding: "utf8",
         },
-        encoding: "utf8",
-      },
-    );
-    assert.equal(result.status, 0, result.stderr);
-    const generated = readJson(
-      `desktop/src-tauri/tauri.namleh.${environment}.release.conf.json`,
-    );
-    assert.equal(generated.identifier, identity.bundleIdentifier);
-    assert.equal(generated.productName, identity.productName);
-    assert.equal(generated.plugins.updater.pubkey, publicKey);
-    assert.deepEqual(generated.plugins.updater.endpoints, [endpoint]);
-    assert.deepEqual(generated.plugins["deep-link"].desktop.schemes, [
-      identity.deepLinkScheme,
-    ]);
-    assert.equal(
-      JSON.stringify(generated).includes(
-        otherIdentity.updaterManifestNamespace,
-      ),
-      false,
-    );
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const generated = readJson(
+        `desktop/src-tauri/tauri.namleh.${environment}.release.conf.json`,
+      );
+      assert.equal(generated.version, version);
+      assert.equal(generated.identifier, identity.bundleIdentifier);
+      assert.equal(generated.productName, identity.productName);
+      assert.equal(generated.plugins.updater.pubkey, publicKey);
+      assert.deepEqual(generated.plugins.updater.endpoints, [endpoint]);
+      assert.deepEqual(generated.plugins["deep-link"].desktop.schemes, [
+        identity.deepLinkScheme,
+      ]);
+      assert.equal(
+        JSON.stringify(generated).includes(
+          otherIdentity.updaterManifestNamespace,
+        ),
+        false,
+      );
+      transition.push({
+        identifier: generated.identifier,
+        productName: generated.productName,
+        deepLinkSchemes: generated.plugins["deep-link"].desktop.schemes,
+        updaterEndpoints: generated.plugins.updater.endpoints,
+        entitlements: generated.bundle.macOS.entitlements,
+      });
+    }
+    assert.deepEqual(transition[0], transition[1]);
+    assert.deepEqual(transition[1], transition[2]);
   }
 
   const staging = identities.staging;
@@ -284,6 +325,7 @@ try {
       cwd: root,
       env: {
         ...process.env,
+        NAMLEH_RELEASE_VERSION: "0.5.8",
         [staging.updaterPublicKeyEnv]: "staging-public-key",
         [staging.updaterEndpointEnv]:
           "https://updates.namlehstudios.com/production/latest.json",
@@ -312,6 +354,7 @@ try {
         cwd: root,
         env: {
           ...process.env,
+          NAMLEH_RELEASE_VERSION: "0.5.8",
           [staging.updaterPublicKeyEnv]: "staging-public-key",
           [staging.updaterEndpointEnv]: invalidEndpoint,
         },

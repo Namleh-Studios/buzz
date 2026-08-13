@@ -4,7 +4,7 @@
     "bundleIdentifier": "com.namlehstudios.buzz.dev",
     "deepLinkScheme": "namleh-buzz-dev",
     "keyringService": "com.namlehstudios.buzz.dev.credentials",
-    "keychainAccessGroup": null,
+    "keychainAccessGroup": "962M5A4PL7.com.namlehstudios.buzz.dev",
     "nestDirectory": ".namleh-buzz-dev",
     "managedRuntimeDirectory": "Namleh Buzz Dev",
     "cliLinkName": "namleh-buzz-dev",
@@ -20,7 +20,7 @@
     "updaterPrivateKeyEnv": null,
     "updaterEndpointEnv": null,
     "updaterEndpoint": null,
-    "signingIdentity": "Apple Development: shelman09@outlook.com (MKPMHJVB9D)"
+    "signingIdentity": "Developer ID Application: STEVEN EDWARD HELMAN (962M5A4PL7)"
   },
   "staging": {
     "productName": "Namleh Buzz Staging",

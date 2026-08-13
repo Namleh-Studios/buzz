@@ -12,11 +12,6 @@ use serde::Deserialize;
 
 use crate::error::CliError;
 
-/// Tauri bundle identifier for the production desktop app. `dirs::data_dir()`
-/// joined with this segment matches `app.path().app_data_dir()` exactly
-/// (Tauri resolves app-data as the platform data dir plus the identifier).
-const PROD_BUNDLE_IDENTIFIER: &str = "xyz.block.buzz.app";
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChannelTemplateRecord {
     pub name: String,
@@ -64,8 +59,8 @@ fn default_visibility() -> String {
 /// Resolve the desktop app's `channel-templates.json` path.
 ///
 /// `override_path` (from `--templates-file`) always wins — useful for the dev
-/// store or tests. Otherwise defaults to the prod bundle's app-data dir:
-/// `<platform-data-dir>/xyz.block.buzz.app/templates/channel-templates.json`.
+/// store or tests. Otherwise defaults to the current Namleh environment's
+/// app-data directory.
 pub fn resolve_templates_path(override_path: Option<&str>) -> Result<PathBuf, CliError> {
     if let Some(p) = override_path {
         return Ok(PathBuf::from(p));
@@ -74,7 +69,7 @@ pub fn resolve_templates_path(override_path: Option<&str>) -> Result<PathBuf, Cl
         CliError::Other("could not resolve platform app-data directory".to_string())
     })?;
     Ok(data_dir
-        .join(PROD_BUNDLE_IDENTIFIER)
+        .join(crate::app_identity::bundle_identifier())
         .join("templates")
         .join("channel-templates.json"))
 }
@@ -141,9 +136,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_templates_path_defaults_to_prod_bundle() {
+    fn resolve_templates_path_defaults_to_namleh_bundle() {
         let path = resolve_templates_path(None).unwrap();
-        assert!(path.ends_with("xyz.block.buzz.app/templates/channel-templates.json"));
+        assert!(path.ends_with("com.namlehstudios.buzz/templates/channel-templates.json"));
+        assert!(!path.to_string_lossy().contains("xyz.block.buzz.app"));
     }
 
     #[test]

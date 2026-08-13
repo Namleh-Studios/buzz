@@ -1,4 +1,5 @@
 pub mod agent_management;
+mod app_identity;
 mod client;
 mod commands;
 mod error;
@@ -26,6 +27,8 @@ where
     I: IntoIterator<Item = S>,
     S: Into<std::ffi::OsString> + Clone,
 {
+    let args: Vec<std::ffi::OsString> = args.into_iter().map(Into::into).collect();
+    app_identity::initialize_from_argv0(args.first().map(std::ffi::OsString::as_os_str));
     // Install ring as the process-level rustls CryptoProvider. Required because the
     // release workflow builds all binaries in one cargo invocation, which unifies
     // features across the workspace and enables *both* ring (from buzz-acp/buzz-dev-mcp)

@@ -37,6 +37,7 @@ pub(crate) const RESERVED_ENV_KEYS: &[&str] = &[
     // agent to an attacker-controlled relay.
     "BUZZ_RELAY_URL",
     "BUZZ_DEEP_LINK_SCHEME",
+    "BUZZ_APP_BUNDLE_IDENTIFIER",
     // Code-execution surface: overriding would let the user run arbitrary
     // binaries/args as the agent process.
     "BUZZ_ACP_AGENT_COMMAND",

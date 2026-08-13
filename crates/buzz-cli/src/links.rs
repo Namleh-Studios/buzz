@@ -9,31 +9,19 @@
 //! Callers are expected to validate inputs first (`validate_hex64`,
 //! `validate_repo_id`); the identifier charsets need no URL encoding.
 
-const DEFAULT_DEEP_LINK_SCHEME: &str = "namleh-buzz";
-
-fn resolve_deep_link_scheme(configured: Option<&str>) -> &str {
-    match configured.map(str::trim).filter(|value| !value.is_empty()) {
-        Some("namleh-buzz-dev") => "namleh-buzz-dev",
-        Some("namleh-buzz-staging") => "namleh-buzz-staging",
-        Some("namleh-buzz") | None => DEFAULT_DEEP_LINK_SCHEME,
-        Some(_) => DEFAULT_DEEP_LINK_SCHEME,
-    }
-}
-
-fn deep_link_scheme() -> String {
-    resolve_deep_link_scheme(std::env::var("BUZZ_DEEP_LINK_SCHEME").ok().as_deref()).to_string()
-}
-
 /// Build a repository link for a repository announcement (kind 30617).
 pub fn repo_link(owner: &str, repo_id: &str) -> String {
-    format!("{}://repo?owner={owner}&d={repo_id}", deep_link_scheme())
+    format!(
+        "{}://repo?owner={owner}&d={repo_id}",
+        crate::app_identity::deep_link_scheme()
+    )
 }
 
 /// Build a pull-request link for a pull request event (kind 1618).
 pub fn pull_request_link(event_id: &str, owner: &str, repo_id: &str) -> String {
     format!(
         "{}://pr?id={event_id}&owner={owner}&d={repo_id}",
-        deep_link_scheme()
+        crate::app_identity::deep_link_scheme()
     )
 }
 
@@ -41,7 +29,7 @@ pub fn pull_request_link(event_id: &str, owner: &str, repo_id: &str) -> String {
 pub fn issue_link(event_id: &str, owner: &str, repo_id: &str) -> String {
     format!(
         "{}://issue?id={event_id}&owner={owner}&d={repo_id}",
-        deep_link_scheme()
+        crate::app_identity::deep_link_scheme()
     )
 }
 
@@ -68,19 +56,5 @@ mod tests {
             repo_link(OWNER, "buzz-world"),
             format!("namleh-buzz://repo?owner={OWNER}&d=buzz-world")
         );
-    }
-
-    #[test]
-    fn scheme_resolution_rejects_upstream_and_unknown_schemes() {
-        assert_eq!(
-            resolve_deep_link_scheme(Some("namleh-buzz-dev")),
-            "namleh-buzz-dev"
-        );
-        assert_eq!(
-            resolve_deep_link_scheme(Some("namleh-buzz-staging")),
-            "namleh-buzz-staging"
-        );
-        assert_eq!(resolve_deep_link_scheme(Some("buzz")), "namleh-buzz");
-        assert_eq!(resolve_deep_link_scheme(Some("https")), "namleh-buzz");
     }
 }

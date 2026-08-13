@@ -17,9 +17,11 @@ if (!["staging", "production"].includes(environment)) {
 }
 
 const identity = identities[environment];
+const releaseVersion = process.env.NAMLEH_RELEASE_VERSION?.trim();
 const updaterPublicKey = process.env[identity.updaterPublicKeyEnv]?.trim();
 const updaterEndpoint = process.env[identity.updaterEndpointEnv]?.trim();
 const missing = [];
+if (!releaseVersion) missing.push("NAMLEH_RELEASE_VERSION");
 if (!updaterPublicKey) missing.push(identity.updaterPublicKeyEnv);
 if (!updaterEndpoint) missing.push(identity.updaterEndpointEnv);
 if (missing.length > 0) {
@@ -94,6 +96,7 @@ if (
 
 const config = {
   productName: identity.productName,
+  version: releaseVersion,
   identifier: identity.bundleIdentifier,
   build: {
     beforeBuildCommand: {

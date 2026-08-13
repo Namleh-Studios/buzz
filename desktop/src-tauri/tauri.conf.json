@@ -69,7 +69,7 @@
     ],
     "macOS": {
       "infoPlist": "Info.plist",
-      "entitlements": "Entitlements.plist",
+      "entitlements": "Entitlements.namleh.development.plist",
       "dmg": {
         "background": "icons/dmg-background.png",
         "windowSize": {

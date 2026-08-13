@@ -3,6 +3,8 @@ import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { createNamlehReleaseEnvironment } from "./namleh-release-environment.mjs";
+
 const desktopDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const identities = JSON.parse(
   readFileSync(resolve(desktopDirectory, "namleh-app-identities.json"), "utf8"),
@@ -16,6 +18,12 @@ if (!["staging", "production"].includes(environment)) {
 }
 
 const identity = identities[environment];
+const otherIdentity =
+  identities[environment === "staging" ? "production" : "staging"];
+const baseConfig = JSON.parse(
+  readFileSync(resolve(desktopDirectory, "src-tauri/tauri.conf.json"), "utf8"),
+);
+const releaseVersion = baseConfig.version;
 const updaterPublicKey = process.env[identity.updaterPublicKeyEnv]?.trim();
 const updaterPrivateKey = process.env[identity.updaterPrivateKeyEnv]?.trim();
 const updaterEndpoint = process.env[identity.updaterEndpointEnv]?.trim();
@@ -30,19 +38,16 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-const buildEnvironment = {
-  ...process.env,
-  NAMLEH_APP_ENV: environment,
-  VITE_NAMLEH_APP_ENV: environment,
-  VITE_NAMLEH_DEEP_LINK_SCHEME: identity.deepLinkScheme,
-  BUZZ_UPDATER_PUBLIC_KEY: updaterPublicKey,
-  BUZZ_UPDATER_ENDPOINT: updaterEndpoint,
-  TAURI_SIGNING_PRIVATE_KEY: updaterPrivateKey,
-  APPLE_SIGNING_IDENTITY: identity.signingIdentity,
-  NAMLEH_UPDATER_AUTHORIZATION_AUDIENCE: identity.updaterAuthorizationAudience,
-  NAMLEH_UPDATER_CHANNEL: identity.updaterChannel,
-  NAMLEH_UPDATER_MANIFEST_NAMESPACE: identity.updaterManifestNamespace,
-};
+const buildEnvironment = createNamlehReleaseEnvironment({
+  parentEnvironment: process.env,
+  environment,
+  identity,
+  otherIdentity,
+  updaterPublicKey,
+  updaterPrivateKey,
+  updaterEndpoint,
+  releaseVersion,
+});
 const generatedConfig = resolve(
   desktopDirectory,
   `src-tauri/tauri.namleh.${environment}.release.conf.json`,

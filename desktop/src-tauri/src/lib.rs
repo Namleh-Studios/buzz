@@ -316,6 +316,9 @@ pub fn run() {
             let app_handle = app.handle().clone();
             app_identity::validate_runtime_config(&app_handle)
                 .map_err(|error| std::io::Error::other(format!("invalid app identity: {error}")))?;
+            app_identity::ensure_isolated_storage().map_err(|error| {
+                std::io::Error::other(format!("initialize isolated app storage: {error}"))
+            })?;
             #[cfg(target_os = "macos")]
             {
                 tray_menu::init(&app_handle)?;

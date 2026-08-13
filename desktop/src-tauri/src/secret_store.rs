@@ -2,9 +2,10 @@
 //!
 //! Secrets are stored as one JSON blob under the environment-specific service
 //! and `"secrets"` account. Signed macOS staging/production builds use their
-//! entitled Data Protection Keychain groups; unsigned development and other
-//! platforms use the `keyring` crate. Without `system-keyring`, callers fall
-//! back to their own `0o600` file storage.
+//! entitled Data Protection Keychain groups. Unsigned development falls back
+//! to the same environment's isolated legacy keyring service when the entitled
+//! group is unavailable. Other platforms use the `keyring` crate. Without
+//! `system-keyring`, callers fall back to their own `0o600` file storage.
 //!
 //! The store is deliberately NOT on any env-read path. `BUZZ_PRIVATE_KEY`
 //! resolution for harnessed agents and CI is handled upstream (an env
@@ -270,10 +271,12 @@ fn is_dpk_unavailable(e: &SFError) -> bool {
 fn dpk_opts(service: &str, key: &str) -> PasswordOptions {
     let mut opts = PasswordOptions::new_generic_password(service, key);
     opts.use_protected_keychain();
-    if let Some(access_group) = crate::app_identity::current().keychain_access_group {
-        opts.set_access_group(access_group);
-    }
+    opts.set_access_group(crate::app_identity::current().keychain_access_group);
     opts
+}
+
+fn is_development() -> bool {
+    crate::app_identity::current().environment == crate::app_identity::AppEnvironment::Development
 }
 
 impl SecretStore {
@@ -315,19 +318,18 @@ impl SecretStore {
 
     /// Read the raw blob bytes from the keychain. `Ok(None)` = not found.
     ///
-    /// Signed staging and production builds use their dedicated Data
-    /// Protection Keychain access group. Development uses the legacy keyring
-    /// backend because unsigned Tauri dev builds cannot access an entitled
-    /// group.
+    /// Signed builds use their dedicated Data Protection Keychain access group.
+    /// Unsigned development falls back to its environment-specific legacy
+    /// keyring service only when macOS reports the entitlement unavailable.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn read_blob_raw(&self) -> Result<Option<Vec<u8>>, String> {
-        if crate::app_identity::current().environment
-            == crate::app_identity::AppEnvironment::Development
-        {
-            return self.read_blob_raw_keyring();
-        }
         match generic_password(dpk_opts(&self.service, BLOB_KEY)) {
             Ok(bytes) => Ok(Some(bytes)),
+            Err(ref error)
+                if is_development() && (is_not_found(error) || is_dpk_unavailable(error)) =>
+            {
+                self.read_blob_raw_keyring()
+            }
             Err(ref error) if is_not_found(error) => Ok(None),
             Err(error) => Err(format!("keychain read: {error}")),
         }
@@ -440,17 +442,17 @@ impl SecretStore {
         }
     }
 
-    /// Uses the environment-specific DPK access group for signed staging and
-    /// production builds; development stays on the unsigned-compatible path.
+    /// Uses the environment-specific DPK access group for every signed build.
+    /// Unsigned development falls back to the isolated legacy keyring service.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn write_blob_raw(&self, bytes: &[u8]) -> Result<(), String> {
-        if crate::app_identity::current().environment
-            == crate::app_identity::AppEnvironment::Development
-        {
-            return self.write_blob_raw_keyring(bytes);
+        match set_generic_password_options(bytes, dpk_opts(&self.service, BLOB_KEY)) {
+            Ok(()) => Ok(()),
+            Err(ref error) if is_development() && is_dpk_unavailable(error) => {
+                self.write_blob_raw_keyring(bytes)
+            }
+            Err(error) => Err(format!("keychain write: {error}")),
         }
-        set_generic_password_options(bytes, dpk_opts(&self.service, BLOB_KEY))
-            .map_err(|error| format!("keychain write: {error}"))
     }
 
     #[cfg(all(feature = "system-keyring", not(target_os = "macos")))]

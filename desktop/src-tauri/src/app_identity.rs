@@ -1,7 +1,6 @@
 use tauri::{AppHandle, Runtime};
 
-#[cfg(any(feature = "mesh-llm", test))]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum AppEnvironment {
@@ -17,7 +16,7 @@ pub(crate) struct AppIdentity {
     pub bundle_identifier: &'static str,
     pub deep_link_scheme: &'static str,
     pub keyring_service: &'static str,
-    pub keychain_access_group: Option<&'static str>,
+    pub keychain_access_group: &'static str,
     pub nest_directory: &'static str,
     pub managed_runtime_directory: &'static str,
     pub cli_link_name: &'static str,
@@ -31,7 +30,7 @@ const DEVELOPMENT: AppIdentity = AppIdentity {
     bundle_identifier: "com.namlehstudios.buzz.dev",
     deep_link_scheme: "namleh-buzz-dev",
     keyring_service: "com.namlehstudios.buzz.dev.credentials",
-    keychain_access_group: None,
+    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz.dev",
     nest_directory: ".namleh-buzz-dev",
     managed_runtime_directory: "Namleh Buzz Dev",
     cli_link_name: "namleh-buzz-dev",
@@ -45,7 +44,7 @@ const STAGING: AppIdentity = AppIdentity {
     bundle_identifier: "com.namlehstudios.buzz.staging",
     deep_link_scheme: "namleh-buzz-staging",
     keyring_service: "com.namlehstudios.buzz.staging.credentials",
-    keychain_access_group: Some("962M5A4PL7.com.namlehstudios.buzz.staging"),
+    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz.staging",
     nest_directory: ".namleh-buzz-staging",
     managed_runtime_directory: "Namleh Buzz Staging",
     cli_link_name: "namleh-buzz-staging",
@@ -59,7 +58,7 @@ const PRODUCTION: AppIdentity = AppIdentity {
     bundle_identifier: "com.namlehstudios.buzz",
     deep_link_scheme: "namleh-buzz",
     keyring_service: "com.namlehstudios.buzz.credentials",
-    keychain_access_group: Some("962M5A4PL7.com.namlehstudios.buzz"),
+    keychain_access_group: "962M5A4PL7.com.namlehstudios.buzz",
     nest_directory: ".namleh-buzz",
     managed_runtime_directory: "Namleh Buzz",
     cli_link_name: "namleh-buzz",
@@ -74,6 +73,23 @@ pub(crate) fn current() -> &'static AppIdentity {
         "production" => &PRODUCTION,
         _ => panic!("invalid NAMLEH_DESKTOP_APP_ENV"),
     }
+}
+
+pub(crate) fn isolated_storage_paths(root: &Path) -> [PathBuf; 2] {
+    let identity = current();
+    [
+        root.join(identity.provider_binding_path),
+        root.join(identity.browser_checkpoint_path),
+    ]
+}
+
+pub(crate) fn ensure_isolated_storage() -> Result<(), String> {
+    let root = dirs::data_dir().ok_or("cannot resolve platform data directory")?;
+    for path in isolated_storage_paths(&root) {
+        std::fs::create_dir_all(&path)
+            .map_err(|error| format!("create isolated storage {}: {error}", path.display()))?;
+    }
+    Ok(())
 }
 
 #[cfg(any(feature = "mesh-llm", test))]
@@ -154,7 +170,10 @@ mod tests {
         assert_eq!(identity.bundle_identifier, "com.namlehstudios.buzz.dev");
         assert_eq!(identity.deep_link_scheme, "namleh-buzz-dev");
         assert!(!identity.keyring_service.contains("buzz-desktop"));
-        assert_eq!(identity.keychain_access_group, None);
+        assert_eq!(
+            identity.keychain_access_group,
+            "962M5A4PL7.com.namlehstudios.buzz.dev"
+        );
         assert!(!identity.nest_directory.starts_with(".buzz"));
         assert!(identity
             .provider_binding_path
@@ -175,5 +194,22 @@ mod tests {
                 path.display()
             );
         }
+    }
+
+    #[test]
+    fn provider_and_browser_storage_resolve_under_the_current_bundle() {
+        let root = std::path::Path::new("/platform-data");
+        let paths = super::isolated_storage_paths(root);
+        assert_eq!(
+            paths[0],
+            root.join("com.namlehstudios.buzz.dev/provider-bindings")
+        );
+        assert_eq!(
+            paths[1],
+            root.join("com.namlehstudios.buzz.dev/browser-checkpoints")
+        );
+        assert!(paths
+            .iter()
+            .all(|path| !path.to_string_lossy().contains("xyz.block.buzz.app")));
     }
 }
