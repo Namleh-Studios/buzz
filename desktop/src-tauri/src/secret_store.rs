@@ -920,6 +920,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn development_mirror_commits_legacy_before_dpk() {
         let writes = std::cell::RefCell::new(Vec::new());
 
@@ -934,11 +935,11 @@ mod tests {
             },
         )
         .unwrap();
-
         assert_eq!(*writes.borrow(), ["legacy", "dpk"]);
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn development_mirror_does_not_advance_dpk_after_legacy_failure() {
         let writes = std::cell::RefCell::new(Vec::new());
 
