@@ -915,14 +915,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [changes]
-    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true'
+    if: github.event_name == 'push' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.desktop-rust == 'true'
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
       - name: Dependency policy
-        run: cargo-deny check
+        run: |
+          cargo-deny --locked check
+          cargo-deny --locked --all-features --manifest-path desktop/src-tauri/Cargo.toml \
+            check --config desktop/src-tauri/deny.toml advisories
 
   dead-token-guard:
     name: Dead Token Reference Guard
