@@ -785,10 +785,8 @@ impl SecretStore {
             }
 
             #[cfg(target_os = "macos")]
-            if is_development() {
-                if !dpk_cleanup_pending {
-                    self.clear_pending_dpk_reset()?;
-                }
+            if is_development() && !dpk_cleanup_pending {
+                self.clear_pending_dpk_reset()?;
             }
 
             // Step 5: clear the in-memory cache.
