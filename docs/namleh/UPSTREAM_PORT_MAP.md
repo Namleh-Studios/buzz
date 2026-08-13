@@ -26,14 +26,15 @@ silently treated as a passing baseline.
   including Rust, Windows, macOS, web, mobile, security, relay/backend E2E, all
   four desktop smoke shards, and both desktop integration shards.
 - Upstream `45f4b91a3` completed
-  [run 31727837133](https://github.com/block/buzz/actions/runs/31727837133)
-  with 32 successful and 3 skipped jobs. `Desktop Smoke E2E (3)` failed one of
-  252 tests after the compact link-preview image remained unloaded
-  (`naturalWidth == 0`) across the initial run and both retries; the aggregate
-  `Desktop` job consequently failed. This is current upstream evidence, not a
-  Namleh regression. The related compact-preview commit `45f4b91a3` remains a
-  boundary review under OPS-229 and cannot be ported while assuming its test
-  suite is green.
+  [CI run 31727837133](https://github.com/block/buzz/actions/runs/31727837133)
+  with 21 successful and 2 failed jobs. Across all check suites attached to the
+  commit, 32 checks succeeded, 3 skipped, and the same 2 failed. `Desktop Smoke
+  E2E (3)` failed one of 252 tests after the compact link-preview image remained
+  unloaded (`naturalWidth == 0`) across the initial run and both retries; the
+  aggregate `Desktop` job consequently failed. This is current upstream
+  evidence, not a Namleh regression. The related compact-preview commit
+  `45f4b91a3` remains a boundary review under OPS-229 and cannot be ported while
+  assuming its test suite is green.
 - Local review covered all 41 commits, verified the range and conflict results,
   validated dependency/license claims, passed the fork remote contract, parsed
   every changed Markdown file, and passed `git diff --check`. No Docker or
