@@ -1,11 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
-import { APP_ICON_SRC } from "../../src/shared/appIdentity";
 import { installMockBridge } from "../helpers/bridge";
 import { waitForAnimations } from "../helpers/animations";
 
 const SCREENSHOT_DIR = "test-results/mobile-pairing-qr";
+const EXPECTED_APP_ICON_SRC =
+  process.env.VITE_NAMLEH_APP_ENV === "staging"
+    ? "/namleh-staging-app-icon@2x.png"
+    : "/namleh-production-app-icon@2x.png";
 
 test.beforeEach(async ({ page }) => {
   await installMockBridge(page, { pairingStartDelayMs: 300 });
@@ -164,7 +167,10 @@ test("mobile pairing starts on demand and reveals the QR code", async ({
   ).toHaveCSS("animation-delay", "0.189s");
   await expect(copyButton).toHaveCSS("animation-name", "enter");
   await expect(copyButton).toHaveCSS("animation-duration", "0.25s");
-  await expect(qrCode.locator("image")).toHaveAttribute("href", APP_ICON_SRC);
+  await expect(qrCode.locator("image")).toHaveAttribute(
+    "href",
+    EXPECTED_APP_ICON_SRC,
+  );
   await waitForAnimations(page);
   const qrBox = await qrContainer.boundingBox();
   const copyBox = await copyButton.boundingBox();
