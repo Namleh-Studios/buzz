@@ -164,6 +164,18 @@ for (const identity of Object.values(identities)) {
 }
 assert.ok(read("desktop/src/main.tsx").includes("APP_PRODUCT_NAME"));
 assert.ok(read("desktop/src-tauri/src/huddle/window.rs").includes("product_name"));
+const developmentConfig = readJson("desktop/src-tauri/tauri.conf.json");
+assert.equal(developmentConfig.bundle.publisher, "Namleh Studios");
+assert.deepEqual(developmentConfig.bundle.icon, [
+  "icons/namleh/production/32x32.png",
+  "icons/namleh/production/128x128.png",
+  "icons/namleh/production/128x128@2x.png",
+  "icons/namleh/production/icon.icns",
+]);
+assert.equal(
+  developmentConfig.bundle.macOS.dmg.background,
+  "icons/namleh/production/dmg-background.png",
+);
 for (const path of [
   "desktop/src/app/App.tsx",
   "desktop/src/features/communities/ui/HostedCommunityOnboarding.tsx",
