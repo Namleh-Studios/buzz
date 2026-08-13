@@ -1,0 +1,45 @@
+[advisories]
+ignore = [
+    # These five advisories already have the same bounded review in the root
+    # dependency policy. They also appear in the Tauri graph through shared or
+    # development dependencies. Keep the two policies aligned until OPS-249
+    # removes the underlying transitive dependencies.
+    { id = "RUSTSEC-2024-0384", reason = "unmaintained instant via nostr; root policy boundary mirrored for Tauri; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained paste via tokenizers; root policy boundary mirrored for Tauri; tracked by OPS-249" },
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml parses only trusted S3/system XML in this graph; root policy boundary mirrored; tracked by OPS-249" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml parses only trusted S3/system XML in this graph; root policy boundary mirrored; tracked by OPS-249" },
+    { id = "RUSTSEC-2026-0243", reason = "unmaintained nostr-relay-pool in the mesh-llm feature; root policy boundary mirrored for Tauri; tracked by OPS-249" },
+
+    # macOS idle detection depends on user-idle -> mach. This is informational,
+    # has no safe in-place upgrade, and is tracked for replacement in OPS-249.
+    { id = "RUSTSEC-2020-0168", reason = "unmaintained mach via user-idle; replacement tracked by OPS-249" },
+
+    # Tauri's supported Linux webview/tray stack still depends on gtk-rs GTK3.
+    # Migrating the platform stack is not a bounded security-port change. These
+    # exact informational advisories are tracked together in OPS-249; any new
+    # GTK advisory remains unbaselined and fails this scan.
+    { id = "RUSTSEC-2024-0411", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0412", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0413", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0414", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0415", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0416", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0417", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0418", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0419", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0420", reason = "unmaintained GTK3 binding required by Tauri Linux; tracked by OPS-249" },
+    { id = "RUSTSEC-2024-0370", reason = "unmaintained proc-macro-error via GTK3 macros; tracked by OPS-249" },
+
+    # tauri-utils -> urlpattern currently carries the unmaintained rust-unic
+    # family. There is no safe direct upgrade at this lock boundary. OPS-249
+    # owns removal when Tauri/urlpattern provides a supported path.
+    { id = "RUSTSEC-2025-0075", reason = "unmaintained rust-unic via Tauri urlpattern; tracked by OPS-249" },
+    { id = "RUSTSEC-2025-0080", reason = "unmaintained rust-unic via Tauri urlpattern; tracked by OPS-249" },
+    { id = "RUSTSEC-2025-0081", reason = "unmaintained rust-unic via Tauri urlpattern; tracked by OPS-249" },
+    { id = "RUSTSEC-2025-0098", reason = "unmaintained rust-unic via Tauri urlpattern; tracked by OPS-249" },
+    { id = "RUSTSEC-2025-0100", reason = "unmaintained rust-unic via Tauri urlpattern; tracked by OPS-249" },
+
+    # Huddle audio uses opus -> audiopus_sys. The advisory is informational and
+    # has no safe upgrade; replacement must preserve audio behavior (OPS-249).
+    { id = "RUSTSEC-2026-0150", reason = "unmaintained audiopus_sys used by Huddle audio; tracked by OPS-249" },
+]
