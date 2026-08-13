@@ -275,6 +275,7 @@ fn dpk_opts(service: &str, key: &str) -> PasswordOptions {
     opts
 }
 
+#[cfg(all(feature = "system-keyring", target_os = "macos"))]
 fn is_development() -> bool {
     crate::app_identity::current().environment == crate::app_identity::AppEnvironment::Development
 }
