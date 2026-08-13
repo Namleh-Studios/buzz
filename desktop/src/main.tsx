@@ -133,6 +133,11 @@ async function bootstrap() {
   document
     .querySelector<HTMLLinkElement>("#app-favicon")
     ?.setAttribute("href", APP_ICON_SRC);
+  resetDevWebviewStateFromUrl();
+  configureDevE2eBridgeFromUrl();
+  recoverLocalStorageQuotaOnStartup();
+  startLocalStorageSweep();
+  await installE2eBridgeIfConfigured();
   if (isTauri()) {
     void getCurrentWindow()
       .setTitle(windowTitle)
@@ -140,11 +145,6 @@ async function bootstrap() {
         console.warn("native window title unavailable", error);
       });
   }
-  resetDevWebviewStateFromUrl();
-  configureDevE2eBridgeFromUrl();
-  recoverLocalStorageQuotaOnStartup();
-  startLocalStorageSweep();
-  await installE2eBridgeIfConfigured();
   await migrateLegacyCommunityStorageBeforeRender();
   renderApp();
 }
