@@ -209,6 +209,9 @@ pub(crate) fn validate_team_snapshot(snapshot: &TeamSnapshot) -> Result<(), Stri
     if snapshot.team.name.trim().is_empty() {
         return Err("Team snapshot team.name is empty".to_string());
     }
+    if let Some(instructions) = snapshot.team.instructions.as_deref() {
+        super::validate_executable_instructions(instructions, "Team instructions")?;
+    }
     if snapshot.members.is_empty() {
         return Err("Team snapshot must have at least one member".to_string());
     }
@@ -339,6 +342,14 @@ mod tests {
         assert_eq!(parsed.members.len(), 2);
         assert_eq!(parsed.members[0].definition.name, "Alice Display");
         assert_eq!(parsed.members[1].definition.name, "Bob Display");
+    }
+
+    #[test]
+    fn snapshot_rejects_hidden_team_instructions() {
+        let mut snapshot = two_member_team();
+        snapshot.team.instructions = Some("Coordinate\u{200B} secretly".to_string());
+
+        assert!(validate_team_snapshot(&snapshot).is_err());
     }
 
     // ── PNG memory guard ──────────────────────────────────────────────────────

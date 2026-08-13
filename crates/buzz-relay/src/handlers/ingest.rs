@@ -196,6 +196,26 @@ fn emit_product_feedback_success(
     );
 }
 
+fn reaction_write_action(event: &Event, channel_id: Option<Uuid>, inserted: bool) -> TraceAction {
+    let claimed_community = claimed_community_from_event(event);
+    match (channel_id, inserted) {
+        (Some(channel), true) => TraceAction::WriteInsert {
+            msg_id: msg_id_label(event.id.as_bytes()),
+            channel: channel_label(channel),
+            claimed_community,
+        },
+        (Some(channel), false) => TraceAction::WriteDuplicate {
+            msg_id: msg_id_label(event.id.as_bytes()),
+            channel: channel_label(channel),
+            claimed_community,
+        },
+        (None, _) => TraceAction::WriteInsertGlobal {
+            msg_id: msg_id_label(event.id.as_bytes()),
+            claimed_community,
+        },
+    }
+}
+
 /// Increment the rejection counter with a bounded reason and transport label.
 ///
 /// Shared by the WS `EVENT` handler and the HTTP `POST /events` handler so
@@ -2824,6 +2844,8 @@ async fn ingest_event_inner(
                 ));
             }
             buzz_db::ReactionEventInsertOutcome::Duplicate => {
+                let action = reaction_write_action(&event, channel_id, false);
+                emit(tracer, action, state_for_request(tenant, auth.pubkey()));
                 return Ok(IngestResult {
                     event_id: event_id_hex,
                     accepted: false,
@@ -2837,25 +2859,14 @@ async fn ingest_event_inner(
         };
 
         let pubkey_hex = auth.pubkey().to_hex();
-        // Spec WriteInsert (line 514) / WriteDuplicate (line 606): emit
-        // the abstract write action. The persist API returns
-        // `was_inserted` (true → Insert, false → Duplicate). This branch
-        // is the reaction path; channel_id is always Some here, so
-        // WriteInsertGlobal does not apply.
-        let claimed = claimed_community_from_event(&event);
-        let action = if was_inserted {
-            TraceAction::WriteInsert {
-                msg_id: msg_id_label(event.id.as_bytes()),
-                channel: channel_label(channel_id.expect("reaction path has channel")),
-                claimed_community: claimed,
-            }
-        } else {
-            TraceAction::WriteDuplicate {
-                msg_id: msg_id_label(event.id.as_bytes()),
-                channel: channel_label(channel_id.expect("reaction path has channel")),
-                claimed_community: claimed,
-            }
-        };
+        // Spec WriteInsert (line 514) / WriteDuplicate (line 606) /
+        // WriteInsertGlobal (line 559): emit the abstract write action. The
+        // persist API returns `was_inserted` (true → Insert/Global, false →
+        // Duplicate). Reactions on project events (issue/PR roots and their
+        // comments) carry no `h` tag, so `channel_id` can be `None` here —
+        // mirror the message write's three-way split instead of asserting a
+        // channel, which panicked the ingest worker on those events.
+        let action = reaction_write_action(&event, channel_id, was_inserted);
         emit(tracer, action, state_for_request(tenant, auth.pubkey()));
         dispatch_persistent_event(
             tenant,
@@ -3278,6 +3289,24 @@ mod tests {
     #[test]
     fn reactions_do_not_require_h_tag() {
         assert!(!requires_h_channel_scope(KIND_REACTION));
+    }
+
+    #[test]
+    fn reaction_duplicate_trace_covers_channel_and_global_targets() {
+        let keys = nostr::Keys::generate();
+        let event = EventBuilder::new(Kind::Custom(KIND_REACTION as u16), "+")
+            .sign_with_keys(&keys)
+            .expect("sign reaction");
+        let channel = Uuid::new_v4();
+
+        assert!(matches!(
+            reaction_write_action(&event, Some(channel), false),
+            TraceAction::WriteDuplicate { .. }
+        ));
+        assert!(matches!(
+            reaction_write_action(&event, None, false),
+            TraceAction::WriteInsertGlobal { .. }
+        ));
     }
 
     #[test]

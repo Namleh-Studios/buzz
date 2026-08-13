@@ -66,6 +66,9 @@ pub fn team_event_content(record: &TeamRecord) -> TeamEventContent {
 ///
 /// Returns an unsigned `EventBuilder` — the caller signs and submits.
 pub fn build_team_event(record: &TeamRecord) -> Result<EventBuilder, String> {
+    if let Some(instructions) = record.instructions.as_deref() {
+        super::validate_executable_instructions(instructions, "Team instructions")?;
+    }
     let content = serde_json::to_string(&team_event_content(record))
         .map_err(|e| format!("failed to serialize team content: {e}"))?;
     let tags =
@@ -83,8 +86,12 @@ pub fn build_team_event(record: &TeamRecord) -> Result<EventBuilder, String> {
 /// patches them onto the local record (see `apply_inbound_team`), matching on
 /// the d-tag (the team's id).
 pub fn team_content_from_event(event: &nostr::Event) -> Result<TeamEventContent, String> {
-    serde_json::from_str(event.content.as_ref())
-        .map_err(|e| format!("failed to parse team event content: {e}"))
+    let content: TeamEventContent = serde_json::from_str(event.content.as_ref())
+        .map_err(|e| format!("failed to parse team event content: {e}"))?;
+    if let Some(Some(instructions)) = content.instructions.as_ref() {
+        super::validate_executable_instructions(instructions, "Team instructions")?;
+    }
+    Ok(content)
 }
 
 /// Build a NIP-09 deletion (kind:5) targeting a team's kind:30176 event.
@@ -127,6 +134,14 @@ mod tests {
         let keys = nostr::Keys::generate();
         let event = builder.sign_with_keys(&keys).unwrap();
         assert_eq!(event.kind.as_u16() as u32, KIND_TEAM);
+    }
+
+    #[test]
+    fn build_team_event_rejects_hidden_instructions() {
+        let mut team = sample_team();
+        team.instructions = Some("Coordinate\u{202E} secretly".to_string());
+
+        assert!(build_team_event(&team).is_err());
     }
 
     #[test]
@@ -227,6 +242,19 @@ mod tests {
         let json = r#"{"name":"Team","persona_ids":["p1"],"instructions":"Coordinate."}"#;
         let restored: TeamEventContent = serde_json::from_str(json).unwrap();
         assert_eq!(restored.instructions, Some(Some("Coordinate.".to_string())));
+    }
+
+    #[test]
+    fn inbound_team_content_rejects_hidden_instructions() {
+        let keys = nostr::Keys::generate();
+        let event = EventBuilder::new(
+            Kind::Custom(KIND_TEAM as u16),
+            r#"{"name":"Team","instructions":"Coordinate\u200b secretly"}"#,
+        )
+        .sign_with_keys(&keys)
+        .unwrap();
+
+        assert!(team_content_from_event(&event).is_err());
     }
 
     #[test]

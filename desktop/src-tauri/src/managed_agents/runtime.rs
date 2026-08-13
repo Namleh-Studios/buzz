@@ -438,6 +438,7 @@ pub fn spawn_agent_child(
         record, &personas, &global,
     )
     .require_resolved()?;
+    effective_cfg.validate_for_execution(&record.name)?;
 
     // Single typed resolver: validates runtime id (dangling harness → Err), resolves
     // command, args (instance wins over definition default), and the full env layer stack.
@@ -695,6 +696,10 @@ pub fn spawn_agent_child(
     }
     let team_instructions = super::spawn_snapshot::effective_team_instructions(record, &teams);
     if let Some(instructions) = &team_instructions {
+        super::definition_validation::validate_executable_instructions(
+            instructions,
+            "Team instructions",
+        )?;
         command.env("BUZZ_ACP_TEAM_INSTRUCTIONS", instructions);
     } else {
         command.env_remove("BUZZ_ACP_TEAM_INSTRUCTIONS");

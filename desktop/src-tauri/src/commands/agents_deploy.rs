@@ -133,6 +133,14 @@ pub(super) fn build_deploy_payload(
     let global = crate::managed_agents::load_global_agent_config(app).unwrap_or_default();
     let personas = load_personas(app).unwrap_or_default();
     let teams = crate::managed_agents::load_teams(app).unwrap_or_default();
+    if let Some(instructions) =
+        crate::managed_agents::spawn_snapshot::effective_team_instructions(record, &teams)
+    {
+        crate::managed_agents::validate_executable_instructions(
+            &instructions,
+            "Team instructions",
+        )?;
+    }
     let persona_env =
         crate::managed_agents::live_persona_env(&personas, record.persona_id.as_deref());
     let global_persona_env = crate::managed_agents::merged_user_env(&global.env_vars, &persona_env);
@@ -142,6 +150,7 @@ pub(super) fn build_deploy_payload(
         record, &personas, &global,
     )
     .require_resolved()?;
+    effective.validate_for_execution(&record.name)?;
 
     ensure_remote_provider_supported(effective.provider.value.as_deref())?;
 

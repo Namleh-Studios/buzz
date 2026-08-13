@@ -427,6 +427,10 @@ type E2eConfig = {
      * import dialog.
      */
     teamSnapshotPreviewHasSourceAllowlist?: boolean;
+    /** Team instructions returned by the mocked team snapshot preview. */
+    teamSnapshotPreviewInstructions?: string;
+    /** Member prompt returned by the mocked team snapshot preview. */
+    teamSnapshotPreviewMemberPrompt?: string;
     /**
      * When set to a non-empty string, `fetch_snapshot_bytes` throws with this
      * message — lets specs prove malformed/hash/size-mismatch error paths.
@@ -8073,10 +8077,11 @@ function upsertMockPersonaRelayEvent(event: RelayEvent): void {
   mockPersonaEvents.push(event);
 }
 
-function upsertMockPersonaEvent(persona: RawPersona): void {
-  const event: RelayEvent = {
-    id: mockEventId(),
-    pubkey: MOCK_IDENTITY_PUBKEY,
+function upsertMockPersonaEvent(
+  persona: RawPersona,
+  identity?: TestIdentity,
+): void {
+  const template = {
     created_at: Math.floor(Date.now() / 1_000),
     kind: KIND_PERSONA,
     tags: [["d", persona.id], ...(persona.shared ? [["shared", "true"]] : [])],
@@ -8092,8 +8097,15 @@ function upsertMockPersonaEvent(persona: RawPersona): void {
       respond_to_allowlist: persona.respond_to_allowlist ?? [],
       parallelism: persona.parallelism ?? null,
     }),
-    sig: "0".repeat(128),
   };
+  const event: RelayEvent = identity
+    ? finalizeEvent(template, hexToBytes(identity.privateKey))
+    : {
+        ...template,
+        id: mockEventId(),
+        pubkey: MOCK_IDENTITY_PUBKEY,
+        sig: "0".repeat(128),
+      };
   upsertMockPersonaRelayEvent(event);
   emitMockGlobalEvent(event);
 }
@@ -8118,7 +8130,7 @@ function publishMockPersonaHead(
       personaSharePublicationCallCount++
     ] ?? "published";
   if (publicationStatus === "published") {
-    upsertMockPersonaEvent(persona);
+    upsertMockPersonaEvent(persona, getActiveIdentity(config));
   }
   return {
     persona: { ...persona },
@@ -12160,11 +12172,13 @@ export function maybeInstallE2eTauriMocks() {
         return {
           name: "Imported Team",
           description: null,
-          instructions: null,
+          instructions:
+            activeConfig?.mock?.teamSnapshotPreviewInstructions ?? null,
           members: [
             {
               displayName: "Team Member",
-              systemPrompt: null,
+              systemPrompt:
+                activeConfig?.mock?.teamSnapshotPreviewMemberPrompt ?? null,
               avatarUrl: null,
               hasSourceAllowlist: previewHasAllowlist,
               sourceAllowlistCount: previewHasAllowlist ? 3 : 0,

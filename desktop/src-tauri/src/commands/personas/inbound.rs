@@ -82,6 +82,8 @@ fn reconcile_inbound_persona_event_blocking(
 
     let state = app.state::<AppState>();
     let event = parse_verified_inbound_event(&event_json)?;
+    let active_owner = state.signing_keys()?.public_key();
+    authorize_inbound_owner(&event, &active_owner)?;
 
     // The live filter subscribes to 30175/30176/30177 (upserts) plus kind:5
     // (NIP-09 deletions). d-tags are NOT unique across kinds, so every path
@@ -102,11 +104,23 @@ fn reconcile_inbound_persona_event_blocking(
 
     // The d-tag identifies the record within its kind. Persona derives it from
     // the parsed record (`persona_d_tag`); team/agent carry it as the event's
-    // d-tag directly. The persona is parsed once here and reused in the apply
-    // branch below — team/agent content is parsed in-branch since their d-tag
-    // comes from the event tag, not the content.
+    // d-tag directly. Definition-bearing content is parsed and validated once
+    // here, before retention, then reused in the apply branch below. This keeps
+    // an unsafe event out of both the retention database and the local store.
     let inbound_persona = (kind == KIND_PERSONA)
         .then(|| persona_from_event(&event))
+        .transpose()?;
+    if let Some(persona) = &inbound_persona {
+        validate_inbound_persona_definition(persona)?;
+    }
+    let inbound_managed_agent = (kind == KIND_MANAGED_AGENT)
+        .then(|| managed_agent_content_from_event(&event))
+        .transpose()?;
+    if let Some(managed_agent) = &inbound_managed_agent {
+        validate_inbound_managed_agent_definition(managed_agent)?;
+    }
+    let inbound_team = (kind == KIND_TEAM)
+        .then(|| team_content_from_event(&event))
         .transpose()?;
     let d_tag = match &inbound_persona {
         Some(persona) => persona_d_tag(persona),
@@ -130,6 +144,7 @@ fn reconcile_inbound_persona_event_blocking(
     else {
         return Ok(());
     };
+    authorize_inbound_owner(&event, &scope.owner_keys.public_key())?;
     let conn = open_retention_db(&scope.db_path)?;
     let outcome = retain_inbound_event(
         &conn,
@@ -159,16 +174,20 @@ fn reconcile_inbound_persona_event_blocking(
         }
         KIND_TEAM => {
             let mut teams = load_teams(&app)?;
-            apply_inbound_team(&mut teams, d_tag, team_content_from_event(&event)?);
+            apply_inbound_team(
+                &mut teams,
+                d_tag,
+                inbound_team
+                    .ok_or_else(|| "team content was not parsed before retention".to_string())?,
+            );
             save_teams(&app, &teams)?;
         }
         KIND_MANAGED_AGENT => {
             let mut agents = load_managed_agents(&app)?;
-            apply_inbound_managed_agent(
-                &mut agents,
-                &d_tag,
-                managed_agent_content_from_event(&event)?,
-            );
+            let managed_agent = inbound_managed_agent.ok_or_else(|| {
+                "managed-agent content was not parsed before retention".to_string()
+            })?;
+            apply_inbound_managed_agent(&mut agents, &d_tag, managed_agent);
             save_managed_agents(&app, &agents)?;
         }
         _ => unreachable!("kind gated above"),
@@ -180,6 +199,25 @@ fn reconcile_inbound_persona_event_blocking(
     let _ = app.emit("agents-data-changed", ());
 
     Ok(())
+}
+
+fn validate_inbound_persona_definition(persona: &AgentDefinition) -> Result<(), String> {
+    crate::managed_agents::validate_agent_definition_text(
+        &persona.display_name,
+        &persona.system_prompt,
+    )
+    .map_err(|error| format!("Inbound persona definition is unsafe: {error}"))
+}
+
+fn validate_inbound_managed_agent_definition(
+    managed_agent: &ManagedAgentEventContent,
+) -> Result<(), String> {
+    crate::managed_agents::validate_managed_agent_definition_text(
+        &managed_agent.name,
+        managed_agent.persona_id.as_deref(),
+        managed_agent.system_prompt.as_deref(),
+    )
+    .map_err(|error| format!("Inbound managed-agent definition is unsafe: {error}"))
 }
 
 /// Parse an inbound wire event and enforce the signature gate. Everything
@@ -195,6 +233,16 @@ fn parse_verified_inbound_event(event_json: &str) -> Result<nostr::Event, String
         .verify()
         .map_err(|e| format!("inbound event failed signature verification: {e}"))?;
     Ok(event)
+}
+
+fn authorize_inbound_owner(
+    event: &nostr::Event,
+    expected_owner: &nostr::PublicKey,
+) -> Result<(), String> {
+    if event.pubkey != *expected_owner {
+        return Err("inbound event author does not match the active workspace owner".to_string());
+    }
+    Ok(())
 }
 
 /// Parse a NIP-09 `a`-tag coordinate `<kind>:<owner_pubkey>:<d_tag>` into its
@@ -269,6 +317,7 @@ fn reconcile_inbound_tombstone(
     else {
         return Ok(());
     };
+    authorize_inbound_owner(event, &scope.owner_keys.public_key())?;
     let conn = open_retention_db(&scope.db_path)?;
     let outcome = retain_inbound_event(
         &conn,

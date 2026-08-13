@@ -4,7 +4,7 @@
 use super::*;
 use std::collections::BTreeMap;
 
-const UUID: &str = "11111111-2222-3333-4444-555555555555";
+const UUID: &str = "11111111-2222-3333-4444-555555555555"; // sadscan:disable sq.pii.cc.visa -- fixed test UUID
 
 /// A local in-app persona: `source_team_persona_slug` is None, so its d-tag
 /// IS its UUID id. Carries env_vars + source_team that must survive a patch.
@@ -672,4 +672,81 @@ fn inbound_gate_accepts_validly_signed_event() {
         .unwrap();
     let parsed = parse_verified_inbound_event(&event.as_json()).unwrap();
     assert_eq!(parsed.pubkey, keys.public_key());
+}
+
+#[test]
+fn inbound_gate_rejects_valid_event_from_wrong_owner() {
+    use nostr::JsonUtil;
+    let active_owner = nostr::Keys::generate();
+    let attacker = nostr::Keys::generate();
+    let event = nostr::EventBuilder::new(nostr::Kind::Custom(30175), "{}")
+        .tags(vec![nostr::Tag::parse(["d", "victim-slug"]).unwrap()])
+        .sign_with_keys(&attacker)
+        .unwrap();
+    let parsed = parse_verified_inbound_event(&event.as_json()).unwrap();
+
+    let error = authorize_inbound_owner(&parsed, &active_owner.public_key())
+        .expect_err("a valid signature from another owner must not authorize local mutation");
+
+    assert!(error.contains("active workspace owner"));
+}
+
+#[test]
+fn inbound_persona_rejects_invisible_definition_text() {
+    let mut inbound = inbound_for("unsafe", "Remote");
+    inbound.system_prompt = "Review\u{200B} code.".to_string();
+
+    let error = validate_inbound_persona_definition(&inbound)
+        .expect_err("relay sync must reject invisible instructions");
+
+    assert!(error.contains("U+200B"));
+}
+
+fn inbound_managed_agent_content(
+    name: &str,
+    persona_id: Option<&str>,
+    system_prompt: Option<&str>,
+) -> crate::managed_agents::agent_events::ManagedAgentEventContent {
+    crate::managed_agents::agent_events::ManagedAgentEventContent {
+        name: name.to_string(),
+        persona_id: persona_id.map(str::to_string),
+        system_prompt: system_prompt.map(str::to_string),
+        model: None,
+        provider: None,
+        persona_source_version: None,
+        parallelism: 1,
+        respond_to: crate::managed_agents::RespondTo::OwnerOnly,
+        respond_to_allowlist: vec![],
+    }
+}
+
+#[test]
+fn inbound_definition_less_agent_rejects_invisible_prompt() {
+    let inbound = inbound_managed_agent_content("Remote Agent", None, Some("Review\u{200B} code."));
+
+    let error = validate_inbound_managed_agent_definition(&inbound)
+        .expect_err("definition-less sync must reject invisible instructions");
+
+    assert!(error.contains("U+200B"));
+}
+
+#[test]
+fn inbound_managed_agent_rejects_bidirectional_name() {
+    let inbound = inbound_managed_agent_content("Remote\u{202E} Agent", None, None);
+
+    let error = validate_inbound_managed_agent_definition(&inbound)
+        .expect_err("managed-agent sync must reject bidirectional names");
+
+    assert!(error.contains("U+202E"));
+}
+
+#[test]
+fn inbound_definition_less_agent_accepts_visible_multiline_prompt() {
+    let inbound = inbound_managed_agent_content(
+        "Remote Agent",
+        None,
+        Some("Review code.\n\tCall out security risks."),
+    );
+
+    assert!(validate_inbound_managed_agent_definition(&inbound).is_ok());
 }

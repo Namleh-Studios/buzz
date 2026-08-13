@@ -148,6 +148,9 @@ pub async fn create_team(input: CreateTeamRequest, app: AppHandle) -> Result<Tea
         let name = trim_required(&input.name, "Team name")?;
         let description = trim_optional(input.description);
         let instructions = trim_optional(input.instructions);
+        if let Some(value) = instructions.as_deref() {
+            crate::managed_agents::validate_executable_instructions(value, "Team instructions")?;
+        }
         let now = now_iso();
 
         let _store_guard = state
@@ -189,6 +192,9 @@ pub async fn update_team(input: UpdateTeamRequest, app: AppHandle) -> Result<Tea
         let name = trim_required(&input.name, "Team name")?;
         let description = trim_optional(input.description);
         let instructions = trim_optional(input.instructions);
+        if let Some(value) = instructions.as_deref() {
+            crate::managed_agents::validate_executable_instructions(value, "Team instructions")?;
+        }
 
         let _store_guard = state
             .managed_agents_store_lock
