@@ -427,6 +427,10 @@ type E2eConfig = {
      * import dialog.
      */
     teamSnapshotPreviewHasSourceAllowlist?: boolean;
+    /** Team instructions returned by the mocked team snapshot preview. */
+    teamSnapshotPreviewInstructions?: string;
+    /** Member prompt returned by the mocked team snapshot preview. */
+    teamSnapshotPreviewMemberPrompt?: string;
     /**
      * When set to a non-empty string, `fetch_snapshot_bytes` throws with this
      * message — lets specs prove malformed/hash/size-mismatch error paths.
@@ -12168,11 +12172,13 @@ export function maybeInstallE2eTauriMocks() {
         return {
           name: "Imported Team",
           description: null,
-          instructions: null,
+          instructions:
+            activeConfig?.mock?.teamSnapshotPreviewInstructions ?? null,
           members: [
             {
               displayName: "Team Member",
-              systemPrompt: null,
+              systemPrompt:
+                activeConfig?.mock?.teamSnapshotPreviewMemberPrompt ?? null,
               avatarUrl: null,
               hasSourceAllowlist: previewHasAllowlist,
               sourceAllowlistCount: previewHasAllowlist ? 3 : 0,

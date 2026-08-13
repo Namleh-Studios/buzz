@@ -49,6 +49,36 @@ const ANALYST_PERSONA_ID = "test-analyst";
 const ANALYST_PUBKEY =
   "953d3363262e86b770419834c53d2446409db6d918a57f8f339d495d54ab001f";
 
+test("team snapshot import shows complete literal executable instructions", async ({
+  page,
+}) => {
+  const teamInstructions =
+    "First team line\nSecond team line\nThird team line\nFourth team line with [label](https://example.com)";
+  const memberPrompt =
+    "First member line\nSecond member line with ![image](https://example.com/image.png)";
+  await installMockBridge(page, {
+    teamSnapshotPreviewInstructions: teamInstructions,
+    teamSnapshotPreviewMemberPrompt: memberPrompt,
+  });
+  await gotoAgentsPage(page);
+
+  await page.getByTestId("team-snapshot-import-input").setInputFiles({
+    name: "test.team.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(TEAM_SNAPSHOT_BYTES),
+  });
+
+  const dialog = page.getByTestId("team-snapshot-import-dialog");
+  const teamReview = dialog.getByTestId("team-snapshot-import-instructions");
+  const memberReview = dialog.getByTestId(
+    "team-snapshot-import-member-prompt-0",
+  );
+  await expect(teamReview).toHaveText(teamInstructions);
+  await expect(memberReview).toHaveText(memberPrompt);
+  await expect(teamReview.locator("a, img")).toHaveCount(0);
+  await expect(memberReview.locator("a, img")).toHaveCount(0);
+});
+
 // ── (a) Confirm-fail + retry ────────────────────────────────────────────────
 
 test("team_snapshot_import_confirm_fail_renders_error_and_retry_succeeds", async ({

@@ -389,6 +389,10 @@ type MockBridgeOptions = {
    * import dialog.
    */
   teamSnapshotPreviewHasSourceAllowlist?: boolean;
+  /** Team instructions returned by the mocked team snapshot preview. */
+  teamSnapshotPreviewInstructions?: string;
+  /** Member prompt returned by the mocked team snapshot preview. */
+  teamSnapshotPreviewMemberPrompt?: string;
   /**
    * When set to a non-empty string, `fetch_snapshot_bytes` throws with this
    * message — lets specs prove malformed/hash/size-mismatch error paths.

@@ -38,6 +38,8 @@ const TOKEN_REFRESH_LEEWAY: Duration = Duration::from_secs(60);
 /// Wall-clock budget for the interactive browser dance. Goose uses 60s.
 /// We match: any longer and the user has gone to lunch.
 const BROWSER_AUTH_TIMEOUT: Duration = Duration::from_secs(60);
+const OAUTH_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_CACHE_BYTES: u64 = 64 * 1024;
 
 /// Asynchronous source of a bearer token. The [`Llm`] calls this per
 /// request, so impls are expected to be cheap on the cache-hit path.
@@ -151,7 +153,10 @@ impl PkceOAuthTokenSource {
         let initial = read_cache(&cache_path);
         Ok(Arc::new(Self {
             cfg,
-            http: Client::new(),
+            http: Client::builder()
+                .timeout(OAUTH_HTTP_TIMEOUT)
+                .build()
+                .map_err(|e| AgentError::Llm(format!("oauth http client: {e}")))?,
             cache_path,
             state: Mutex::new(initial),
         }))
@@ -222,8 +227,10 @@ impl PkceOAuthTokenSource {
             .await
             .map_err(|e| AgentError::Llm(format!("oauth refresh: {e}")))?;
         if !resp.status().is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(AgentError::Llm(format!("oauth refresh failed: {body}")));
+            return Err(AgentError::Llm(format!(
+                "oauth refresh failed with status {}",
+                resp.status()
+            )));
         }
         let v: Value = resp
             .json()
@@ -493,7 +500,7 @@ fn read_private_cache(path: &Path) -> io::Result<Vec<u8>> {
     use std::io::Read;
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
-    let mut file = fs::OpenOptions::new()
+    let file = fs::OpenOptions::new()
         .read(true)
         .custom_flags(nix::libc::O_NOFOLLOW)
         .open(path)?;
@@ -511,9 +518,21 @@ fn read_private_cache(path: &Path) -> io::Result<Vec<u8>> {
     if meta.permissions().mode() & 0o077 != 0 {
         file.set_permissions(fs::Permissions::from_mode(0o600))?;
     }
+    if meta.len() > MAX_CACHE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "oauth cache exceeds size limit",
+        ));
+    }
 
-    let mut body = Vec::new();
-    file.read_to_end(&mut body)?;
+    let mut body = Vec::with_capacity(meta.len() as usize);
+    file.take(MAX_CACHE_BYTES + 1).read_to_end(&mut body)?;
+    if body.len() as u64 > MAX_CACHE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "oauth cache exceeds size limit",
+        ));
+    }
     Ok(body)
 }
 
@@ -521,7 +540,24 @@ fn read_private_cache(path: &Path) -> io::Result<Vec<u8>> {
 /// Windows DACL work deferred behind the [`create_private_temp_file`] seam.
 #[cfg(not(unix))]
 fn read_private_cache(path: &Path) -> io::Result<Vec<u8>> {
-    fs::read(path)
+    use std::io::Read;
+
+    let file = fs::File::open(path)?;
+    if file.metadata()?.len() > MAX_CACHE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "oauth cache exceeds size limit",
+        ));
+    }
+    let mut body = Vec::new();
+    file.take(MAX_CACHE_BYTES + 1).read_to_end(&mut body)?;
+    if body.len() as u64 > MAX_CACHE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "oauth cache exceeds size limit",
+        ));
+    }
+    Ok(body)
 }
 
 /// Removes a temp file on drop unless it was already renamed away. Keeps a
@@ -645,7 +681,7 @@ fn token_from_response(
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0)
-            + secs
+            .saturating_add(secs)
     });
     Ok(CachedToken {
         access_token,
@@ -683,18 +719,22 @@ fn random_state() -> Result<String, AgentError> {
 fn callback_outcome(
     params: &std::collections::HashMap<String, String>,
     expected_state: &str,
-) -> (Result<String, String>, String) {
-    let result = match (params.get("code"), params.get("state")) {
-        (Some(code), Some(st)) if st == expected_state => Ok(code.clone()),
-        (Some(_), Some(_)) => Err("state mismatch".to_string()),
-        _ => Err(params
-            .get("error")
-            .map(|e| sanitize_callback_detail(e))
-            .unwrap_or_else(|| "missing code".into())),
+) -> (Option<Result<String, String>>, String) {
+    let result = match params.get("state") {
+        Some(state) if state == expected_state => {
+            Some(params.get("code").cloned().ok_or_else(|| {
+                params
+                    .get("error")
+                    .map(|e| sanitize_callback_detail(e))
+                    .unwrap_or_else(|| "missing code".into())
+            }))
+        }
+        _ => None,
     };
-    let page = match result {
-        Ok(_) => "<h2>Buzz: signed in</h2><p>You can close this window.</p>",
-        Err(_) => "<h2>Buzz auth failed</h2><p>You can close this window and try again.</p>",
+    let page = match &result {
+        Some(Ok(_)) => "<h2>Buzz: signed in</h2><p>You can close this window.</p>",
+        Some(Err(_)) => "<h2>Buzz auth failed</h2><p>You can close this window and try again.</p>",
+        None => "<h2>Buzz auth ignored</h2><p>This callback did not match an active sign-in.</p>",
     }
     .to_string();
     (result, page)
@@ -702,14 +742,45 @@ fn callback_outcome(
 
 /// Neutralize an attacker-controllable OAuth `error` value before it enters
 /// an error string that later reaches the logs. Control characters (CR/LF in
-/// particular) enable log-line injection, and an unbounded value could flood
-/// the logs — replace control chars with spaces and cap the length.
+/// particular), Unicode line separators, and invisible formatting controls
+/// enable log spoofing, and an unbounded value could flood the logs.
 fn sanitize_callback_detail(raw: &str) -> String {
     const MAX: usize = 200;
     raw.chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
+        .map(|character| {
+            if character.is_control() || is_log_format_control(character) {
+                ' '
+            } else {
+                character
+            }
+        })
         .take(MAX)
         .collect()
+}
+
+fn is_log_format_control(character: char) -> bool {
+    matches!(
+        character as u32,
+        0x0600..=0x0605
+            | 0x061C
+            | 0x06DD
+            | 0x070F
+            | 0x0890..=0x0891
+            | 0x08E2
+            | 0x180E
+            | 0x200B..=0x200F
+            | 0x2028..=0x202E
+            | 0x2060..=0x206F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x110BD
+            | 0x110CD
+            | 0x13430..=0x1345F
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0001
+            | 0xE0020..=0xE007F
+    )
 }
 
 /// Spin up a localhost callback server, open the authorize URL in a
@@ -739,8 +810,10 @@ async fn browser_pkce_flow(
             let expected = expected_state.clone();
             async move {
                 let (result, page) = callback_outcome(&params, &expected);
-                if let Some(sender) = tx.lock().await.take() {
-                    let _ = sender.send(result);
+                if let Some(result) = result {
+                    if let Some(sender) = tx.lock().await.take() {
+                        let _ = sender.send(result);
+                    }
                 }
                 Html(page)
             }
@@ -798,8 +871,10 @@ async fn browser_pkce_flow(
         .await
         .map_err(|e| AgentError::Llm(format!("oauth exchange: {e}")))?;
     if !resp.status().is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        return Err(AgentError::Llm(format!("oauth exchange failed: {body}")));
+        return Err(AgentError::Llm(format!(
+            "oauth exchange failed with status {}",
+            resp.status()
+        )));
     }
     let v: Value = resp
         .json()
@@ -900,6 +975,20 @@ mod tests {
     fn token_from_response_rejects_empty_access_token() {
         let v: Value = serde_json::from_str(r#"{"access_token":""}"#).unwrap();
         assert!(token_from_response(&v, None).is_err());
+    }
+
+    #[test]
+    fn token_from_response_saturates_extreme_expiry() {
+        let token = token_from_response(
+            &serde_json::json!({
+                "access_token": "token",
+                "expires_in": u64::MAX,
+            }),
+            None,
+        )
+        .expect("extreme server expiry must not panic");
+
+        assert_eq!(token.expires_at, Some(u64::MAX));
     }
 
     #[tokio::test]
@@ -1036,11 +1125,18 @@ mod tests {
         let payload = "<script>alert('xss')</script>";
         let mut params = std::collections::HashMap::new();
         params.insert("error".to_string(), payload.to_string());
+        params.insert("state".to_string(), "expected-state".to_string());
 
         let (result, page) = callback_outcome(&params, "expected-state");
 
         // The failure detail still reaches the waiting flow via `result`...
-        assert_eq!(result.as_ref().err().map(String::as_str), Some(payload));
+        assert_eq!(
+            result
+                .as_ref()
+                .and_then(|value| value.as_ref().err())
+                .map(String::as_str),
+            Some(payload)
+        );
         // ...but the browser page is static and inert.
         assert!(
             !page.contains(payload),
@@ -1059,13 +1155,17 @@ mod tests {
     #[test]
     fn test_callback_error_detail_strips_control_chars_and_caps_length() {
         // The `error` param feeds an error string that reaches the logs, so
-        // CR/LF (log-line injection) must be neutralized and length bounded.
-        let payload = format!("bad\r\nInjected: fake-log-line{}", "A".repeat(500));
+        // line and formatting controls must be neutralized and length bounded.
+        let payload = format!(
+            "bad\r\nInjected\u{2028}fake\u{202E}log\u{200B}line{}",
+            "A".repeat(500)
+        );
         let mut params = std::collections::HashMap::new();
         params.insert("error".to_string(), payload);
+        params.insert("state".to_string(), "expected-state".to_string());
 
         let (result, _page) = callback_outcome(&params, "expected-state");
-        let detail = result.unwrap_err();
+        let detail = result.expect("matching callback").unwrap_err();
 
         assert!(
             !detail.contains('\r'),
@@ -1073,12 +1173,16 @@ mod tests {
         );
         assert!(!detail.contains('\n'), "newline survived: {detail:?}");
         assert!(
+            !detail.contains(['\u{2028}', '\u{202E}', '\u{200B}']),
+            "Unicode formatting control survived: {detail:?}"
+        );
+        assert!(
             detail.len() <= 200,
             "detail not length-capped: {}",
             detail.len()
         );
         assert!(
-            detail.starts_with("bad  Injected:"),
+            detail.starts_with("bad  Injected fake log line"),
             "unexpected sanitized detail: {detail:?}"
         );
     }
@@ -1096,14 +1200,22 @@ mod tests {
 
         let (result, page) = callback_outcome(&params, "expected-state");
 
-        assert_eq!(
-            result.as_ref().err().map(String::as_str),
-            Some("state mismatch")
-        );
+        assert!(result.is_none());
         assert!(
             !page.contains("<img"),
             "callback page reflected the code param: {page}"
         );
+    }
+
+    #[test]
+    fn test_callback_error_requires_matching_state() {
+        let mut params = std::collections::HashMap::new();
+        params.insert("error".to_string(), "access_denied".to_string());
+
+        let (result, page) = callback_outcome(&params, "expected-state");
+
+        assert!(result.is_none());
+        assert!(page.contains("ignored"));
     }
 
     #[test]
@@ -1115,7 +1227,10 @@ mod tests {
         let (result, page) = callback_outcome(&params, "expected-state");
 
         assert_eq!(
-            result.as_ref().ok().map(String::as_str),
+            result
+                .as_ref()
+                .and_then(|value| value.as_ref().ok())
+                .map(String::as_str),
             Some("auth-code-123")
         );
         assert!(
@@ -1341,5 +1456,14 @@ mod tests {
             read_cache(&link).is_none(),
             "read_cache followed a symlinked cache path"
         );
+    }
+
+    #[test]
+    fn test_read_cache_refuses_oversized_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("cache.json");
+        std::fs::write(&cache, vec![b'x'; MAX_CACHE_BYTES as usize + 1]).unwrap();
+
+        assert!(read_cache(&cache).is_none());
     }
 }

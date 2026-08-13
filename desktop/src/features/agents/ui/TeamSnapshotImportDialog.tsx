@@ -156,9 +156,12 @@ function PreviewBody({
           <p className="text-xs text-muted-foreground">{preview.description}</p>
         ) : null}
         {preview.instructions ? (
-          <p className="line-clamp-3 text-xs text-muted-foreground">
+          <pre
+            className="max-h-40 select-text overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/30 p-2 font-mono text-xs text-muted-foreground"
+            data-testid="team-snapshot-import-instructions"
+          >
             {preview.instructions}
-          </p>
+          </pre>
         ) : null}
       </div>
 
@@ -179,9 +182,12 @@ function PreviewBody({
               <div key={idx} className="flex flex-col gap-0.5 px-1 py-0.5">
                 <p className="text-sm font-medium">{member.displayName}</p>
                 {member.systemPrompt ? (
-                  <p className="line-clamp-1 text-xs text-muted-foreground">
+                  <pre
+                    className="max-h-32 select-text overflow-y-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 font-mono text-xs text-muted-foreground"
+                    data-testid={`team-snapshot-import-member-prompt-${idx}`}
+                  >
                     {member.systemPrompt}
-                  </p>
+                  </pre>
                 ) : null}
               </div>
             ))}

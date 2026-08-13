@@ -31,6 +31,14 @@ pub struct EffectiveAgentConfig {
 }
 
 impl EffectiveAgentConfig {
+    pub fn validate_for_execution(&self, agent_name: &str) -> Result<(), String> {
+        super::definition_validation::validate_agent_definition_text(
+            agent_name,
+            self.system_prompt.value.as_deref().unwrap_or_default(),
+        )
+        .map_err(|error| format!("Agent definition cannot be executed: {error}"))
+    }
+
     /// The relay-mesh model id this config resolves to, or `None` when the
     /// effective provider isn't relay-mesh.
     ///

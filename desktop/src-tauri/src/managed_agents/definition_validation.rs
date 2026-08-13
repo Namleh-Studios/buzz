@@ -32,15 +32,21 @@ pub(crate) fn validate_agent_definition_text(
             "Display name is too long ({display_name_chars} characters, max {MAX_DISPLAY_NAME_CHARS})"
         ));
     }
-    if system_prompt.len() > MAX_SYSTEM_PROMPT_BYTES {
+    validate_visible_text(display_name, "Display name", false)?;
+    validate_executable_instructions(system_prompt, "Agent instructions")
+}
+
+pub(crate) fn validate_executable_instructions(
+    instructions: &str,
+    label: &str,
+) -> Result<(), String> {
+    if instructions.len() > MAX_SYSTEM_PROMPT_BYTES {
         return Err(format!(
-            "Agent instructions are too long ({} bytes, max {MAX_SYSTEM_PROMPT_BYTES})",
-            system_prompt.len()
+            "{label} are too long ({} bytes, max {MAX_SYSTEM_PROMPT_BYTES})",
+            instructions.len()
         ));
     }
-
-    validate_visible_text(display_name, "Display name", false)?;
-    validate_visible_text(system_prompt, "Agent instructions", true)
+    validate_visible_text(instructions, label, true)
 }
 
 /// Validate the human-reviewed definition text carried by a managed agent.

@@ -117,6 +117,9 @@ fn reconcile_inbound_persona_event_blocking(
     if let Some(managed_agent) = &inbound_managed_agent {
         validate_inbound_managed_agent_definition(managed_agent)?;
     }
+    let inbound_team = (kind == KIND_TEAM)
+        .then(|| team_content_from_event(&event))
+        .transpose()?;
     let d_tag = match &inbound_persona {
         Some(persona) => persona_d_tag(persona),
         None => event_d_tag(&event)?,
@@ -168,7 +171,12 @@ fn reconcile_inbound_persona_event_blocking(
         }
         KIND_TEAM => {
             let mut teams = load_teams(&app)?;
-            apply_inbound_team(&mut teams, d_tag, team_content_from_event(&event)?);
+            apply_inbound_team(
+                &mut teams,
+                d_tag,
+                inbound_team
+                    .ok_or_else(|| "team content was not parsed before retention".to_string())?,
+            );
             save_teams(&app, &teams)?;
         }
         KIND_MANAGED_AGENT => {

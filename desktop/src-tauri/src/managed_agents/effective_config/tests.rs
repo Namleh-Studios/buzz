@@ -103,6 +103,27 @@ fn global(model: Option<&str>, provider: Option<&str>) -> GlobalAgentConfig {
     }
 }
 
+#[test]
+fn legacy_linked_definition_with_hidden_text_cannot_execute() {
+    let rec = record(Some("d1"), None, None, None);
+    let defs = vec![definition("d1", None, None, "Review\u{200B} code")];
+    let config = resolve_effective_config(&rec, &defs, &global(None, None))
+        .require_resolved()
+        .expect("definition resolves");
+
+    assert!(config.validate_for_execution(&rec.name).is_err());
+}
+
+#[test]
+fn legacy_definition_less_agent_with_hidden_text_cannot_execute() {
+    let rec = record(None, None, None, Some("Review\u{2028}code"));
+    let config = resolve_effective_config(&rec, &[], &global(None, None))
+        .require_resolved()
+        .expect("record resolves");
+
+    assert!(config.validate_for_execution(&rec.name).is_err());
+}
+
 // ── Linked instance: definition → global, record ignored ──
 
 #[test]
