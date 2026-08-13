@@ -3,6 +3,7 @@
 - Previous checkpoint:
 - New checkpoint:
 - Upstream comparison:
+- `git cherry` / patch-equivalence result for the exact checkpoint range:
 
 ## Classification
 
@@ -13,6 +14,7 @@
 ## Adaptation boundary
 
 - Conflicts and manual adaptations:
+- Manual-adaptation source SHA(s):
 - Product, UI, and architecture decisions:
 - Explicitly excluded work:
 

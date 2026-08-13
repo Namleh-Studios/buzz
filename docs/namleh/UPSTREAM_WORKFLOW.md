@@ -64,12 +64,23 @@ tag, or release around the Namleh environment contract.
 
 Never merge `upstream/main` wholesale into `dev` or `main`.
 
+The last reviewed checkpoint and proposal-level adaptation boundaries are
+recorded in [`UPSTREAM_PORT_MAP.md`](UPSTREAM_PORT_MAP.md). Update that record
+at every completed stage boundary, including a no-change review.
+
 ```bash
 scripts/configure-namleh-remotes.sh
 git fetch upstream main
 git fetch origin dev
-git log --oneline --decorate <last-reviewed-upstream>..upstream/main
-git diff --stat <last-reviewed-upstream>..upstream/main
+old=<last-reviewed-upstream>
+new=$(git rev-parse upstream/main)
+if ! git merge-base --is-ancestor "$old" "$new"; then
+  echo "upstream checkpoint is not an ancestor of the fetched head" >&2
+  exit 1
+fi
+git log --oneline --decorate "$old..$new"
+git diff --stat "$old..$new"
+git cherry origin/dev "$new" "$old"
 git switch -c codex/upstream-<yyyy-mm-dd> origin/dev
 ```
 
@@ -81,6 +92,15 @@ commit as:
 - compatible reusable improvement;
 - product, UI, or architecture decision requiring explicit approval; or
 - out of scope.
+
+Record the exact `old` and `new` SHAs and the `git cherry` result. A `-` entry
+is patch-equivalent to Namleh `dev`; a `+` entry is not. Patch equivalence does
+not replace behavioral or security-state verification.
+
+For an open proposal branch, compare its live head to the reviewed proposal
+SHA recorded in the port map. If the reviewed SHA is not an ancestor after a
+force-push or rebase, inspect both complete patch sets or use `git range-diff`;
+never assume `reviewed..live` is an additive range.
 
 Port only the approved commits, using `git cherry-pick -x` when a commit can be
 accepted intact and a bounded manual adaptation otherwise. Do not merge draft,
