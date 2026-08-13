@@ -205,8 +205,7 @@ where
     L: FnOnce() -> Result<(), String>,
     D: FnOnce() -> Result<(), String>,
 {
-    write_legacy()?;
-    write_dpk()
+    write_legacy().and_then(|()| write_dpk())
 }
 
 impl SecretStore {
@@ -726,6 +725,10 @@ impl SecretStore {
 
             #[cfg(target_os = "macos")]
             let mut dpk_cleanup_pending = false;
+            #[cfg(target_os = "macos")]
+            if is_development() {
+                self.write_pending_dpk_reset_keys(&all_keys)?;
+            }
 
             for key in &all_keys {
                 #[cfg(target_os = "macos")]
@@ -783,9 +786,7 @@ impl SecretStore {
 
             #[cfg(target_os = "macos")]
             if is_development() {
-                if dpk_cleanup_pending {
-                    self.write_pending_dpk_reset_keys(&all_keys)?;
-                } else {
+                if !dpk_cleanup_pending {
                     self.clear_pending_dpk_reset()?;
                 }
             }

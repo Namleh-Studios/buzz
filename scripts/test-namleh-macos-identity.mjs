@@ -168,6 +168,16 @@ assert.ok(
     rustEntryPoint.indexOf("ensure_isolated_storage"),
   "isolated storage must be recreated only after reset succeeds",
 );
+const secretStore = read("desktop/src-tauri/src/secret_store.rs");
+const resetCleanup = secretStore.slice(
+  secretStore.indexOf("pub fn delete_all_with_legacy_cleanup"),
+  secretStore.indexOf("pub fn verify_fully_wiped"),
+);
+assert.ok(
+  resetCleanup.indexOf("write_pending_dpk_reset_keys(&all_keys)") <
+    resetCleanup.indexOf("for key in &all_keys"),
+  "development DPK reset inventory must be written before destructive cleanup",
+);
 
 for (const path of [
   "web/src/features/invite/ui/InvitePage.tsx",
