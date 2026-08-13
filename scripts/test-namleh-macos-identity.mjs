@@ -171,6 +171,7 @@ assert.deepEqual(developmentConfig.bundle.icon, [
   "icons/namleh/production/128x128.png",
   "icons/namleh/production/128x128@2x.png",
   "icons/namleh/production/icon.icns",
+  "icons/icon.ico",
 ]);
 assert.equal(
   developmentConfig.bundle.macOS.dmg.background,
