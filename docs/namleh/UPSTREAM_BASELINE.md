@@ -2,6 +2,10 @@
 
 Recorded for OPS-196 on 2026-08-10 before any Namleh product change.
 
+This file preserves the untouched starting evidence. The current reviewed
+upstream range and adaptation decisions live in
+[`UPSTREAM_PORT_MAP.md`](UPSTREAM_PORT_MAP.md).
+
 ## Source identity
 
 - Fork: `Namleh-Studios/buzz`
