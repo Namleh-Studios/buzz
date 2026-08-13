@@ -203,16 +203,7 @@ pub(crate) fn run_boot_reset_with_keychain(ctx: ResetContext<'_>) -> ResetOutcom
         None
     };
 
-    // ── Step 3: remove only this environment's nest and CLI symlink ────────
-    if let Some(ref nest) = ctx.nest_dir {
-        let _ = std::fs::remove_dir_all(nest);
-    }
-    if let Some(ref home) = ctx.home_dir {
-        let link_name = crate::managed_agents::cli_link_name();
-        let _ = std::fs::remove_file(home.join(".local").join("bin").join(link_name));
-    }
-
-    // ── Step 4: keychain — LAST so we can read keys before deleting ──────────
+    // ── Step 3: keychain ─────────────────────────────────────────────────────
     if let Err(e) = ctx.keychain.delete_all_with_legacy() {
         eprintln!("buzz-desktop reset: keychain delete: {e}");
         // Keychain failure is fatal: keep sentinel, signal failure.
@@ -243,6 +234,17 @@ pub(crate) fn run_boot_reset_with_keychain(ctx: ResetContext<'_>) -> ResetOutcom
             completed: false,
             failed: true,
         };
+    }
+
+    // ── Step 4: remove only this environment's nest and CLI symlink ──────────
+    // These paths cannot be rolled back, so remove them only after every
+    // fallible credential deletion has succeeded.
+    if let Some(ref nest) = ctx.nest_dir {
+        let _ = std::fs::remove_dir_all(nest);
+    }
+    if let Some(ref home) = ctx.home_dir {
+        let link_name = crate::managed_agents::cli_link_name();
+        let _ = std::fs::remove_file(home.join(".local").join("bin").join(link_name));
     }
 
     // ── Step 5: sweep ALL reset trash (including from prior crashed boots) ───
@@ -489,6 +491,39 @@ mod tests {
             sentinel_path(&app_data).exists(),
             "sentinel must be preserved on failure"
         );
+    }
+
+    #[test]
+    fn test_keychain_failure_preserves_nest_and_cli_link() {
+        let tmp = TempDir::new().unwrap();
+        let app_data = make_app_data(&tmp);
+        let nest = tmp.path().join(".namleh-buzz-dev");
+        let home = tmp.path().join("home");
+        let cli_link = home
+            .join(".local/bin")
+            .join(crate::managed_agents::cli_link_name());
+        std::fs::create_dir_all(&nest).unwrap();
+        std::fs::create_dir_all(cli_link.parent().unwrap()).unwrap();
+        std::fs::write(nest.join("workspace-state"), b"preserve").unwrap();
+        std::fs::write(&cli_link, b"preserve").unwrap();
+        write_sentinel(&app_data).unwrap();
+
+        let keychain = FakeKeychain::fail("keychain unavailable");
+        let outcome = run_boot_reset_with_keychain(ResetContext {
+            app_data_dir: &app_data,
+            legacy_app_data_dir: None,
+            nest_dir: Some(nest.clone()),
+            keychain: &keychain,
+            home_dir: Some(home),
+        });
+
+        assert!(outcome.failed);
+        assert!(!outcome.completed);
+        assert_eq!(
+            std::fs::read(nest.join("workspace-state")).unwrap(),
+            b"preserve"
+        );
+        assert_eq!(std::fs::read(cli_link).unwrap(), b"preserve");
     }
 
     // ── Test 4: app-data rename works but verify fails ────────────────────────

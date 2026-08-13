@@ -1,51 +1,18 @@
-//! OS keyring access for desktop nsec private keys.
-//!
-//! Secrets are stored as one JSON blob under the environment-specific service
-//! and `"secrets"` account. Signed macOS staging/production builds use their
-//! entitled Data Protection Keychain groups. Unsigned development falls back
-//! to the same environment's isolated legacy keyring service when the entitled
-//! group is unavailable. Other platforms use the `keyring` crate. Without
-//! `system-keyring`, callers fall back to their own `0o600` file storage.
-//!
-//! The store is deliberately NOT on any env-read path. `BUZZ_PRIVATE_KEY`
-//! resolution for harnessed agents and CI is handled upstream (an env
-//! short-circuit for the human key, child-process env injection for agents);
-//! adding an env tier here would duplicate that precedence and create a
-//! divergent-behavior trap.
+//! Environment-scoped OS keyring access for desktop secrets.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-/// Result of probing the keyring before a migration: distinguishes "reachable
-/// but holds no entry" (safe to migrate into) from "unreachable this boot"
-/// (must NOT migrate — re-importing from a leftover plaintext file could
-/// resurrect a rotated/stale key).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyringProbe {
-    /// Keyring is reachable and an entry for the key already exists.
     Present,
-    /// Keyring is reachable but has no entry for the key.
     ReachableButEmpty,
-    /// Keyring backend is unavailable this boot (no Secret Service, dbus
-    /// failure, etc.). Migration must be skipped.
     Unreachable,
 }
 
-/// Username used for the single blob keychain entry. All secrets are stored
-/// as a JSON map under this name within the service.
 const BLOB_KEY: &str = "secrets";
-
-// ── Interprocess advisory lock ─────────────────────────────────────────────
-//
-// Each environment has its own service, but concurrent instances of that
-// environment still share a blob. Mutations lock, re-read, write, then update
-// the process cache so a warm cache cannot drop another process's keys.
-
-/// Return the path of the advisory lockfile for `service`.
-///
-/// Unix uses `/tmp/buzz-keychain-<uid>-<service>.lock`; Windows derives the
-/// named mutex from the same service-keyed path.
+const DPK_RESET_PENDING_KEY: &str = "dpk-reset-pending";
 fn blob_lockfile_path(service: &str) -> PathBuf {
     #[cfg(unix)]
     {
@@ -56,33 +23,18 @@ fn blob_lockfile_path(service: &str) -> PathBuf {
     }
     #[cfg(not(unix))]
     {
-        // Windows: no lockfile used (named mutex instead); this path is only
-        // used to derive the mutex name and for test assertions.
         std::env::temp_dir().join(format!("buzz-keychain-{service}.lock"))
     }
 }
 
-/// Acquire an exclusive advisory file lock for the blob identified by `service`.
-///
-/// Opens (or creates) the lockfile and blocks until the lock is acquired.
-/// Returns the open `File`; the lock is released when the file is dropped.
-///
-/// On non-Unix/non-Windows platforms this is a no-op that returns a stub.
 #[cfg(feature = "system-keyring")]
 fn acquire_blob_lock(service: &str) -> Result<BlobLockGuard, String> {
     let path = blob_lockfile_path(service);
     BlobLockGuard::acquire(&path)
 }
 
-/// RAII guard that holds an exclusive advisory file lock.
-///
-/// On Unix, implemented via `flock(2)` on a lockfile in the system temp dir.
-/// On Windows, implemented via a named kernel mutex (cross-process, no file I/O
-/// needed). The Windows mutex handle is released on drop.
 #[cfg(feature = "system-keyring")]
 struct BlobLockGuard {
-    /// The open lockfile. Never read — held purely for RAII: closing the fd
-    /// releases the `flock(LOCK_EX)` on Unix.
     #[cfg(unix)]
     #[allow(dead_code)]
     file: std::fs::File,
@@ -102,7 +54,6 @@ impl BlobLockGuard {
                 .open(path)
                 .map_err(|e| format!("blob lock open {}: {e}", path.display()))?;
             use std::os::unix::io::AsRawFd;
-            // LOCK_EX blocks until the lock is acquired (no LOCK_NB).
             let ret = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
             if ret != 0 {
                 let err = std::io::Error::last_os_error();
@@ -113,16 +64,12 @@ impl BlobLockGuard {
 
         #[cfg(windows)]
         {
-            // Named kernel mutexes are cross-process on Windows — no lockfile
-            // needed. Derive a unique mutex name from the lockfile path so
-            // distinct services get distinct mutexes.
             let name_str = format!(
                 "Local\\BuzzKeychain-{}",
                 path.file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("default")
             );
-            // Encode as null-terminated UTF-16.
             let name_wide: Vec<u16> = name_str
                 .encode_utf16()
                 .chain(std::iter::once(0u16))
@@ -132,8 +79,6 @@ impl BlobLockGuard {
             use windows_sys::Win32::System::Threading::{
                 CreateMutexW, WaitForSingleObject, INFINITE,
             };
-            // CreateMutexW: lpMutexAttributes = null (default security),
-            // bInitialOwner = FALSE (0), lpName = our mutex name.
             let handle = unsafe {
                 CreateMutexW(
                     std::ptr::null::<SECURITY_ATTRIBUTES>(),
@@ -141,15 +86,12 @@ impl BlobLockGuard {
                     name_wide.as_ptr(),
                 )
             };
-            // HANDLE = *mut c_void; null means creation failed.
             if handle.is_null() {
                 let err = std::io::Error::last_os_error();
                 return Err(format!("blob lock CreateMutexW: {err}"));
             }
             let wait_result = unsafe { WaitForSingleObject(handle, INFINITE) };
             if wait_result != WAIT_OBJECT_0 {
-                // Also accept WAIT_ABANDONED (0x80) — previous holder crashed;
-                // the mutex is still acquired and we own it.
                 if wait_result != windows_sys::Win32::Foundation::WAIT_ABANDONED {
                     let err = std::io::Error::last_os_error();
                     unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) };
@@ -163,7 +105,6 @@ impl BlobLockGuard {
             });
         }
 
-        // Fallback for exotic platforms: no-op lock (only Unix/Windows ship).
         #[allow(unreachable_code)]
         Err("blob lock: unsupported platform".to_string())
     }
@@ -173,10 +114,7 @@ impl BlobLockGuard {
 impl Drop for BlobLockGuard {
     fn drop(&mut self) {
         #[cfg(unix)]
-        {
-            // Dropping `self.file` closes the fd, which releases flock on Unix.
-            // Nothing explicit needed.
-        }
+        {}
         #[cfg(windows)]
         {
             unsafe {
@@ -187,20 +125,12 @@ impl Drop for BlobLockGuard {
     }
 }
 
-// ── End interprocess advisory lock ────────────────────────────────────────
-
-/// An OS keyring, addressed by service name. All secrets are stored in a
-/// single JSON blob entry (one OS prompt per process lifetime).
 pub struct SecretStore {
     service: String,
-    /// In-memory cache of the deserialized blob. `None` means "not yet loaded".
     cache: Mutex<Option<HashMap<String, String>>>,
 }
 
 impl SecretStore {
-    /// Keyring-backed store under `service`. The active platform backend
-    /// (apple-native / windows-native / sync-secret-service) is chosen at
-    /// compile time.
     pub fn keyring(service: impl Into<String>) -> Self {
         SecretStore {
             service: service.into(),
@@ -208,13 +138,6 @@ impl SecretStore {
         }
     }
 
-    /// Return a process-global `SecretStore` for `service`. All callers with
-    /// the same service name share one instance — and therefore one in-memory
-    /// cache and one mutex — so concurrent blob read-modify-write operations
-    /// see each other's writes and the last-writer-wins race is closed.
-    ///
-    /// Only one service name (`"buzz-desktop"`) is used in practice. If a
-    /// second service name is ever needed, this can be extended to a registry.
     pub fn shared(service: &'static str) -> &'static SecretStore {
         use std::sync::OnceLock;
         static INSTANCE: OnceLock<SecretStore> = OnceLock::new();
@@ -222,10 +145,6 @@ impl SecretStore {
     }
 }
 
-/// Whether a keyring error string indicates the backend itself is unavailable
-/// (vs. a per-entry error like "not found"). Mirrors goose's discriminator
-/// (`crates/goose/src/config/base.rs`): treat dbus / Secret Service / platform
-/// secure-storage failures as "keyring unavailable, fall back to file".
 #[cfg(feature = "system-keyring")]
 fn is_keyring_availability_error(error_str: &str) -> bool {
     let lower = error_str.to_lowercase();
@@ -280,7 +199,72 @@ fn is_development() -> bool {
     crate::app_identity::current().environment == crate::app_identity::AppEnvironment::Development
 }
 
+#[cfg(feature = "system-keyring")]
+fn write_development_mirrors<L, D>(write_legacy: L, write_dpk: D) -> Result<(), String>
+where
+    L: FnOnce() -> Result<(), String>,
+    D: FnOnce() -> Result<(), String>,
+{
+    write_legacy()?;
+    write_dpk()
+}
+
 impl SecretStore {
+    #[cfg(all(feature = "system-keyring", target_os = "macos"))]
+    fn pending_dpk_reset_keys(&self) -> Result<Option<Vec<String>>, String> {
+        let entry = keyring_entry(&self.service, DPK_RESET_PENDING_KEY)
+            .map_err(|e| format!("reset marker entry: {e}"))?;
+        match entry.get_password() {
+            Ok(value) => serde_json::from_str(&value)
+                .map(Some)
+                .map_err(|e| format!("reset marker json: {e}")),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(format!("reset marker read: {e}")),
+        }
+    }
+
+    #[cfg(all(feature = "system-keyring", target_os = "macos"))]
+    fn write_pending_dpk_reset_keys(&self, keys: &[String]) -> Result<(), String> {
+        let value = serde_json::to_string(keys).map_err(|e| format!("reset marker json: {e}"))?;
+        let entry = keyring_entry(&self.service, DPK_RESET_PENDING_KEY)
+            .map_err(|e| format!("reset marker entry: {e}"))?;
+        entry
+            .set_password(&value)
+            .map_err(|e| format!("reset marker write: {e}"))
+    }
+
+    #[cfg(all(feature = "system-keyring", target_os = "macos"))]
+    fn clear_pending_dpk_reset(&self) -> Result<(), String> {
+        let entry = keyring_entry(&self.service, DPK_RESET_PENDING_KEY)
+            .map_err(|e| format!("reset marker entry: {e}"))?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(format!("reset marker delete: {e}")),
+        }
+    }
+
+    /// Finish a DPK cleanup deferred by an unsigned development reset. The
+    /// legacy reset marker prevents a later signed launch from resurrecting
+    /// credentials that the unsigned process could not access.
+    #[cfg(all(feature = "system-keyring", target_os = "macos"))]
+    fn finish_pending_dpk_reset(&self) -> Result<bool, String> {
+        let Some(keys) = self.pending_dpk_reset_keys()? else {
+            return Ok(false);
+        };
+
+        let blob_key = BLOB_KEY.to_string();
+        for key in keys.iter().chain(std::iter::once(&blob_key)) {
+            match delete_generic_password_options(dpk_opts(&self.service, key)) {
+                Ok(()) => {}
+                Err(ref error) if is_not_found(error) => {}
+                Err(ref error) if is_dpk_unavailable(error) => return Ok(true),
+                Err(error) => return Err(format!("pending dpk delete {key}: {error}")),
+            }
+        }
+        self.clear_pending_dpk_reset()?;
+        Ok(false)
+    }
+
     /// Read the blob from the keychain and return the deserialized map.
     ///
     /// Returns `Ok(None)` when no blob entry exists yet (first launch or
@@ -308,8 +292,6 @@ impl SecretStore {
             }
         };
 
-        // Only populate the cache if it is still empty — a concurrent
-        // mutate_blob() may have written a newer value while we were reading.
         let mut guard = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         if guard.is_none() {
             *guard = Some(map.clone());
@@ -317,15 +299,18 @@ impl SecretStore {
         Ok(Some(map))
     }
 
-    /// Read the raw blob bytes from the keychain. `Ok(None)` = not found.
-    ///
-    /// Signed builds use their dedicated Data Protection Keychain access group.
-    /// Unsigned development falls back to its environment-specific legacy
-    /// keyring service only when macOS reports the entitlement unavailable.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn read_blob_raw(&self) -> Result<Option<Vec<u8>>, String> {
+        if is_development() && self.finish_pending_dpk_reset()? {
+            return self.read_blob_raw_keyring();
+        }
         if is_development() {
             if let Some(bytes) = self.read_blob_raw_keyring()? {
+                match set_generic_password_options(&bytes, dpk_opts(&self.service, BLOB_KEY)) {
+                    Ok(()) => {}
+                    Err(ref error) if is_dpk_unavailable(error) => {}
+                    Err(error) => return Err(format!("keychain mirror: {error}")),
+                }
                 return Ok(Some(bytes));
             }
         }
@@ -351,8 +336,6 @@ impl SecretStore {
         self.read_blob_raw_keyring()
     }
 
-    /// Read blob via the legacy `keyring` crate (Windows, Linux, or macOS dev
-    /// builds that lack hardened-runtime entitlements).
     #[cfg(feature = "system-keyring")]
     fn read_blob_raw_keyring(&self) -> Result<Option<Vec<u8>>, String> {
         let entry =
@@ -367,48 +350,13 @@ impl SecretStore {
         }
     }
 
-    /// Atomically load the blob, apply `f` to a candidate map, write back if
-    /// changed, and only then advance the cache.
-    ///
-    /// **Cross-process safety**: acquires an exclusive advisory file lock
-    /// (`flock(2)` on Unix, `LockFileEx` on Windows) before reading, mutating,
-    /// and writing. The lock is keyed by service name and stored in the system
-    /// temp directory, making it reachable from both the signed DMG build and
-    /// unsigned dev builds. Inside the lock a fresh `read_blob_raw()` is always
-    /// performed (even when the cache is warm) so a concurrent process's write
-    /// is never silently dropped.
-    ///
-    /// **Idempotent**: when `f` leaves the candidate equal to the freshly-read
-    /// map, `write_blob_raw` is skipped entirely. On macOS the legacy
-    /// `SecKeychain` API treats a write as a distinct ACL operation from the
-    /// "Always Allow"-ed read, so skipping no-op writes eliminates the keychain
-    /// prompt that fires when saving an agent whose model changed but whose key
-    /// did not.
-    ///
-    /// **Copy-on-write**: the candidate `next` is a separate allocation from
-    /// `current`. The cache is only replaced with `next` after `write_blob_raw`
-    /// succeeds. On write failure the cache is cleared to `None` so the next
-    /// caller re-reads from the keychain rather than building on a stale state.
-    ///
-    /// Deadlock-free: `read_blob_raw` and `write_blob_raw` do not acquire the
-    /// cache mutex. `load_blob` does acquire it, but `mutate_blob` does not call
-    /// `load_blob` — it reads from the keyring directly inside the file lock.
     #[cfg(feature = "system-keyring")]
     fn mutate_blob<F>(&self, f: F) -> Result<(), String>
     where
         F: FnOnce(&mut HashMap<String, String>),
     {
-        // Acquire the interprocess advisory lock first. All Buzz processes
-        // using the same service name contend on the same lockfile at
-        // /tmp/buzz-keychain-<uid>-<service>.lock (a deterministic per-user
-        // path invariant to $TMPDIR), so only one process performs a
-        // read-modify-write at a time.
         let _lock = acquire_blob_lock(&self.service)?;
 
-        // Always do a fresh read from the keychain while holding the lock —
-        // this is the critical correction over the prior warm-cache path. A
-        // stale warm cache would make us build our candidate on an outdated
-        // baseline and drop keys written by another process.
         let raw = self.read_blob_raw()?;
         let current: HashMap<String, String> = match raw {
             None => HashMap::new(),
@@ -419,33 +367,23 @@ impl SecretStore {
             }
         };
 
-        // Build the candidate state in a separate allocation so that a write
-        // failure below cannot leave the cache ahead of durable storage.
         let mut next = current.clone();
         f(&mut next);
 
-        // Skip the keychain write when the candidate equals the freshly-read
-        // durable state — no I/O needed and no keychain ACL prompt on macOS.
         if next == current {
-            // Update the cache to the fresh read even on no-op so subsequent
-            // reads in this process see any keys another process may have added.
             let mut guard = self.cache.lock().unwrap_or_else(|e| e.into_inner());
             *guard = Some(current);
             return Ok(());
         }
 
-        // Write to keyring while still holding the file lock.
         let json = serde_json::to_string(&next).map_err(|e| format!("blob serialize: {e}"))?;
         match self.write_blob_raw(json.as_bytes()) {
             Ok(()) => {
-                // Advance the cache to `next` only after the durable write succeeds.
                 let mut guard = self.cache.lock().unwrap_or_else(|e| e.into_inner());
                 *guard = Some(next);
                 Ok(())
             }
             Err(e) => {
-                // On write failure, clear the cache so the next caller re-reads
-                // from the keychain rather than building on a stale state.
                 let mut guard = self.cache.lock().unwrap_or_else(|e| e.into_inner());
                 *guard = None;
                 Err(e)
@@ -453,16 +391,20 @@ impl SecretStore {
         }
     }
 
-    /// Uses the environment-specific DPK access group for every signed build.
-    /// Unsigned development falls back to the isolated legacy keyring service.
     #[cfg(all(feature = "system-keyring", target_os = "macos"))]
     fn write_blob_raw(&self, bytes: &[u8]) -> Result<(), String> {
+        if is_development() {
+            return write_development_mirrors(
+                || self.write_blob_raw_keyring(bytes),
+                || match set_generic_password_options(bytes, dpk_opts(&self.service, BLOB_KEY)) {
+                    Ok(()) => Ok(()),
+                    Err(ref error) if is_dpk_unavailable(error) => Ok(()),
+                    Err(error) => Err(format!("keychain mirror: {error}")),
+                },
+            );
+        }
         match set_generic_password_options(bytes, dpk_opts(&self.service, BLOB_KEY)) {
-            Ok(()) if is_development() => self.write_blob_raw_keyring(bytes),
             Ok(()) => Ok(()),
-            Err(ref error) if is_development() && is_dpk_unavailable(error) => {
-                self.write_blob_raw_keyring(bytes)
-            }
             Err(error) => Err(format!("keychain write: {error}")),
         }
     }
@@ -752,25 +694,11 @@ impl SecretStore {
         }
     }
 
-    /// Delete the entire keychain blob for this service, plus all legacy per-key
-    /// entries that could resurrect an identity on next boot.
-    ///
-    /// Order of operations:
-    /// 1. Read the blob to collect every key name (e.g. `identity`, agent keys).
-    /// 2. Delete legacy per-key DPK entries for every key + the DPK blob itself.
-    /// 3. Delete legacy per-key keyring entries for every key.
-    /// 4. Delete the blob entry.
-    /// 5. Clear the in-memory cache.
-    ///
-    /// This is the correct wipe path for sign-out: the old `delete_all` skipped
-    /// step 1–3 so stale per-key entries could be re-imported on the next launch
-    /// via `migrate_legacy_key`. This method prevents that resurrection.
     pub fn delete_all_with_legacy_cleanup(&self) -> Result<(), String> {
         #[cfg(feature = "system-keyring")]
         {
             let _lock = acquire_blob_lock(&self.service)?;
 
-            // Step 1: read current blob keys (best-effort; no entry = empty set).
             let blob_keys: Vec<String> = match self.read_blob_raw() {
                 Ok(Some(bytes)) => {
                     let json = String::from_utf8(bytes).unwrap_or_default();
@@ -781,22 +709,32 @@ impl SecretStore {
                 _ => vec![],
             };
 
-            // Always include "identity" even if the blob is empty or absent —
-            // it may exist only as a legacy per-key entry.
             let mut all_keys = blob_keys;
             if !all_keys.contains(&"identity".to_string()) {
                 all_keys.push("identity".to_string());
             }
+            #[cfg(target_os = "macos")]
+            if is_development() {
+                if let Some(pending_keys) = self.pending_dpk_reset_keys()? {
+                    for key in pending_keys {
+                        if !all_keys.contains(&key) {
+                            all_keys.push(key);
+                        }
+                    }
+                }
+            }
 
-            // Steps 2 & 3: delete legacy per-key entries for every key.
+            #[cfg(target_os = "macos")]
+            let mut dpk_cleanup_pending = false;
+
             for key in &all_keys {
                 #[cfg(target_os = "macos")]
                 {
                     match delete_generic_password_options(dpk_opts(&self.service, key)) {
                         Ok(()) => {}
                         Err(ref e) if is_not_found(e) => {}
-                        Err(ref e) if is_dpk_unavailable(e) => {
-                            return Err(format!("dpk unavailable deleting {key}: {e}"));
+                        Err(ref e) if is_development() && is_dpk_unavailable(e) => {
+                            dpk_cleanup_pending = true;
                         }
                         Err(e) => return Err(format!("dpk per-key delete {key}: {e}")),
                     }
@@ -821,8 +759,8 @@ impl SecretStore {
                 match delete_generic_password_options(dpk_opts(&self.service, BLOB_KEY)) {
                     Ok(()) => {}
                     Err(ref e) if is_not_found(e) => {}
-                    Err(ref e) if is_dpk_unavailable(e) => {
-                        return Err(format!("dpk unavailable deleting blob: {e}"));
+                    Err(ref e) if is_development() && is_dpk_unavailable(e) => {
+                        dpk_cleanup_pending = true;
                     }
                     Err(e) => return Err(format!("dpk blob delete: {e}")),
                 }
@@ -840,6 +778,15 @@ impl SecretStore {
                     Err(e) => {
                         return Err(format!("keyring blob delete: {e}"));
                     }
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            if is_development() {
+                if dpk_cleanup_pending {
+                    self.write_pending_dpk_reset_keys(&all_keys)?;
+                } else {
+                    self.clear_pending_dpk_reset()?;
                 }
             }
 
@@ -885,8 +832,11 @@ impl SecretStore {
             // 3. DPK blob (macOS only).
             #[cfg(target_os = "macos")]
             {
+                let dpk_reset_pending =
+                    is_development() && matches!(self.pending_dpk_reset_keys(), Ok(Some(_)));
                 match generic_password(dpk_opts(&self.service, BLOB_KEY)) {
                     Err(ref e) if is_not_found(e) => {}
+                    Err(ref e) if dpk_reset_pending && is_dpk_unavailable(e) => {}
                     Ok(_) => return false,
                     // Any other error → fail closed (not proof of absence).
                     Err(_) => return false,
@@ -894,6 +844,7 @@ impl SecretStore {
                 // 4. Per-key DPK "identity" (macOS only).
                 match generic_password(dpk_opts(&self.service, "identity")) {
                     Err(ref e) if is_not_found(e) => {}
+                    Err(ref e) if dpk_reset_pending && is_dpk_unavailable(e) => {}
                     Ok(_) => return false,
                     // Any other error → fail closed.
                     Err(_) => return false,
@@ -966,6 +917,44 @@ mod tests {
             store.load("identity").unwrap(),
             Some("nsec1test".to_string())
         );
+    }
+
+    #[test]
+    fn development_mirror_commits_legacy_before_dpk() {
+        let writes = std::cell::RefCell::new(Vec::new());
+
+        write_development_mirrors(
+            || {
+                writes.borrow_mut().push("legacy");
+                Ok(())
+            },
+            || {
+                writes.borrow_mut().push("dpk");
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(*writes.borrow(), ["legacy", "dpk"]);
+    }
+
+    #[test]
+    fn development_mirror_does_not_advance_dpk_after_legacy_failure() {
+        let writes = std::cell::RefCell::new(Vec::new());
+
+        let result = write_development_mirrors(
+            || {
+                writes.borrow_mut().push("legacy");
+                Err("legacy unavailable".to_string())
+            },
+            || {
+                writes.borrow_mut().push("dpk");
+                Ok(())
+            },
+        );
+
+        assert_eq!(result.unwrap_err(), "legacy unavailable");
+        assert_eq!(*writes.borrow(), ["legacy"]);
     }
 
     // ── Cross-process race tests (require real OS keychain) ────────────────
