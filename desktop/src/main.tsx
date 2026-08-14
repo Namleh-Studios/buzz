@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { App } from "@/app/App";
 import { RootErrorBoundary } from "@/app/RootErrorBoundary";
 import { NostrBindConsentDialog } from "@/features/profile/ui/NostrBindConsentDialog";
@@ -17,9 +19,10 @@ import { EmojiBurstProvider } from "@/shared/ui/EmojiBurstProvider";
 import { PoofBurstProvider } from "@/shared/ui/PoofBurstProvider";
 import { Toaster } from "@/shared/ui/sonner";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { StagingIndicator } from "@/shared/ui/StagingIndicator";
 import { recoverLocalStorageQuotaOnStartup } from "@/shared/lib/localStorageQuota";
 import { startLocalStorageSweep } from "@/shared/lib/localStorageSweep";
-import { NAMLEH_APP_ENVIRONMENT } from "@/shared/appIdentity";
+import { APP_ICON_SRC, APP_PRODUCT_NAME } from "@/shared/appIdentity";
 
 type E2eWindow = Window & {
   __BUZZ_E2E__?: unknown;
@@ -29,18 +32,6 @@ const E2E_DEFAULT_PUBKEY = "deadbeef".repeat(8);
 const E2E_COMMUNITY_ID = "e2e-default-community";
 const ONBOARDING_COMPLETION_STORAGE_KEY_PREFIX = "buzz-onboarding-complete.v1:";
 const DEV_STATE_RESET_PARAM = "resetDevState";
-
-function StagingIndicator() {
-  if (NAMLEH_APP_ENVIRONMENT !== "staging") return null;
-  return (
-    <div
-      className="pointer-events-none fixed top-2 left-1/2 z-[100] -translate-x-1/2 rounded-full border border-black/25 bg-warning px-3 py-1 font-semibold text-black text-xs shadow-md"
-      data-testid="staging-indicator"
-    >
-      STAGING
-    </div>
-  );
-}
 
 function resetDevWebviewStateFromUrl() {
   if (!import.meta.env.DEV) {
@@ -62,7 +53,7 @@ function resetDevWebviewStateFromUrl() {
 }
 
 function configureDevE2eBridgeFromUrl() {
-  if (!import.meta.env.DEV) {
+  if (!(import.meta.env.DEV || import.meta.env.MODE === "e2e")) {
     return;
   }
 
@@ -91,6 +82,7 @@ function configureDevE2eBridgeFromUrl() {
 function renderApp() {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
+      <StagingIndicator />
       {/* block/buzz#5078 — catch any uncaught render error so a WebKit
           SecurityError from localStorage can't blank the whole window. */}
       <RootErrorBoundary>
@@ -104,7 +96,6 @@ function renderApp() {
                   <PoofBurstProvider>
                     <UpdaterProvider>
                       <App />
-                      <StagingIndicator />
                       <NostrBindConsentDialog />
                     </UpdaterProvider>
                     <Toaster />
@@ -134,11 +125,26 @@ async function installE2eBridgeIfConfigured() {
 }
 
 async function bootstrap() {
+  const windowTitle =
+    huddleWindowChannelId() === null
+      ? APP_PRODUCT_NAME
+      : `${APP_PRODUCT_NAME} — Huddle`;
+  document.title = windowTitle;
+  document
+    .querySelector<HTMLLinkElement>("#app-favicon")
+    ?.setAttribute("href", APP_ICON_SRC);
   resetDevWebviewStateFromUrl();
   configureDevE2eBridgeFromUrl();
   recoverLocalStorageQuotaOnStartup();
   startLocalStorageSweep();
   await installE2eBridgeIfConfigured();
+  if (isTauri()) {
+    void getCurrentWindow()
+      .setTitle(windowTitle)
+      .catch((error) => {
+        console.warn("native window title unavailable", error);
+      });
+  }
   await migrateLegacyCommunityStorageBeforeRender();
   renderApp();
 }

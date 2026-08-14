@@ -2,7 +2,7 @@
 
 use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
-use crate::app_state::AppState;
+use crate::{app_identity, app_state::AppState};
 
 /// Close the companion belonging to an ended huddle. The native lifecycle is
 /// authoritative here because a webview can be suspended while it is closing.
@@ -58,7 +58,7 @@ pub async fn open_huddle_window(
     }
 
     WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
-        .title("Huddle")
+        .title(format!("{} — Huddle", app_identity::current().product_name))
         .inner_size(960.0, 720.0)
         .min_inner_size(720.0, 520.0)
         .build()

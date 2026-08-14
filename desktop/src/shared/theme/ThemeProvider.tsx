@@ -22,9 +22,10 @@ import {
   loadThemeData,
   resolveSystemTheme,
 } from "./theme-loader";
+import { namlehAccentForTheme } from "./namleh-brand";
 
 export const THEME_STORAGE_KEY = "buzz-theme";
-const CACHE_KEY = "buzz-theme-cache";
+const CACHE_KEY = "buzz-theme-cache-v2";
 export const ACCENT_STORAGE_KEY = "buzz-accent-color";
 export const NEUTRAL_ACCENT = "neutral";
 const FOLLOW_SYSTEM_KEY = "buzz-follow-system";
@@ -181,7 +182,7 @@ function rgbToHex({ r, g, b }: Rgb): string {
     .join("")}`;
 }
 
-function applyAccentColor(value: string) {
+function applyAccentColor(value: string, themeName?: string) {
   const root = document.documentElement;
   if (value === NEUTRAL_ACCENT) {
     const styles = window.getComputedStyle(root);
@@ -202,6 +203,9 @@ function applyAccentColor(value: string) {
     root.style.setProperty("--sidebar-primary-foreground", background);
     root.style.setProperty("--sidebar-active", foreground);
     root.style.setProperty("--sidebar-active-foreground", background);
+    if (themeName && isBuzzTheme(themeName)) {
+      root.style.setProperty("--ring", foreground);
+    }
     return;
   }
 
@@ -220,12 +224,15 @@ function applyAccentColor(value: string) {
   root.style.setProperty("--sidebar-primary-foreground", fgHsl);
   root.style.setProperty("--sidebar-active", accentHsl);
   root.style.setProperty("--sidebar-active-foreground", fgHsl);
+  if (themeName && isBuzzTheme(themeName)) {
+    root.style.setProperty("--ring", accentHsl);
+  }
 }
 
 /**
- * The Buzz themes ship with a fixed neutral accent (the GitHub black/white
- * foreground) rather than a user-selectable accent color. When a Buzz theme is
- * active we force `NEUTRAL_ACCENT` regardless of the stored preference, and the
+ * The first-party Buzz themes ship with the Namleh brand accent rather than a
+ * user-selectable accent color. When a Buzz theme is active we force its
+ * light/dark brand value regardless of the stored preference, and the
  * appearance panel hides the accent picker. The user's chosen accent is left
  * untouched in storage so it returns when they switch back to another theme.
  */
@@ -235,13 +242,13 @@ export function isBuzzTheme(themeName: string): boolean {
 
 /**
  * Resolve the accent to actually apply for a theme: Buzz themes are pinned to
- * the neutral accent; every other theme uses the stored/selected accent.
+ * the light/dark Namleh accent; every other theme uses the stored accent.
  */
 function resolveEffectiveAccent(
   themeName: string,
   accentColor: string,
 ): string {
-  return isBuzzTheme(themeName) ? NEUTRAL_ACCENT : accentColor;
+  return namlehAccentForTheme(themeName) ?? accentColor;
 }
 
 /**
@@ -421,10 +428,10 @@ function applyCachedVars(): string | null {
     applyBuzzSidebar(themeName);
 
     const accent = getStorageItem(ACCENT_STORAGE_KEY) ?? DEFAULT_ACCENT;
-    // Pin Buzz themes to the neutral accent here too, matching applyTheme.
-    // Otherwise a cached Buzz theme + non-neutral stored accent flashes the
+    // Pin Buzz themes to the Namleh accent here too, matching applyTheme.
+    // Otherwise a cached Buzz theme + user-selected accent flashes the
     // old accent on reload until the async applyTheme effect runs.
-    applyAccentColor(resolveEffectiveAccent(themeName, accent));
+    applyAccentColor(resolveEffectiveAccent(themeName, accent), themeName);
 
     return themeName;
   } catch {
@@ -470,12 +477,13 @@ async function applyTheme(name: SyntaxThemeName): Promise<{
   // browser paints the new theme + accent together. Doing this in a later
   // microtask (e.g. the caller's `.then`) let the previous accent flash on the
   // new theme for a frame — the flicker seen when switching to Buzz. Buzz
-  // themes resolve to the neutral accent regardless of the stored value.
+  // themes resolve to the Namleh accent regardless of the stored value.
   applyAccentColor(
     resolveEffectiveAccent(
       name,
       getStorageItem(ACCENT_STORAGE_KEY) ?? DEFAULT_ACCENT,
     ),
+    name,
   );
 
   // Cache for FOUC prevention
@@ -605,11 +613,14 @@ export function ThemeProvider({
   }, [followSystem]);
 
   // Re-apply the accent when the user picks a new swatch or the effective theme
-  // changes. applyTheme already applies the (Buzz-neutral-aware) accent in the
+  // changes. applyTheme already applies the (Buzz-brand-aware) accent in the
   // same synchronous batch as the theme vars — the flicker fix — so this effect
   // is idempotent on theme changes and simply covers accent-only changes.
   useEffect(() => {
-    applyAccentColor(resolveEffectiveAccent(effectiveTheme, accentColor));
+    applyAccentColor(
+      resolveEffectiveAccent(effectiveTheme, accentColor),
+      effectiveTheme,
+    );
   }, [accentColor, effectiveTheme]);
 
   const setTheme = useCallback((name: string) => {

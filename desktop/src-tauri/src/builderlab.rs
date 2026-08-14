@@ -25,7 +25,7 @@ const AUTH_COMPLETE_HTML: &str = r#"<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Buzz authentication complete</title>
+  <title>{{PRODUCT_NAME}} authentication complete</title>
   <style>
     :root {
       color-scheme: light;
@@ -59,12 +59,18 @@ const AUTH_COMPLETE_HTML: &str = r#"<!doctype html>
       box-shadow: 8px 8px 0 #231e1e;
     }
 
-    .bee {
+    .namleh-mark {
       display: block;
       width: 72px;
       height: auto;
       margin-bottom: 40px;
       color: #231e1e;
+    }
+
+    .namleh-mark svg {
+      display: block;
+      width: 100%;
+      height: auto;
     }
 
     .eyebrow {
@@ -108,7 +114,7 @@ const AUTH_COMPLETE_HTML: &str = r#"<!doctype html>
         box-shadow: 6px 6px 0 #231e1e;
       }
 
-      .bee {
+      .namleh-mark {
         width: 60px;
         margin-bottom: 32px;
       }
@@ -117,27 +123,25 @@ const AUTH_COMPLETE_HTML: &str = r#"<!doctype html>
 </head>
 <body>
   <main>
-    <svg class="bee" viewBox="0 0 466 309" role="img" aria-label="Buzz">
-      <defs>
-        <mask id="bee-mask">
-          <rect width="466" height="309" fill="black"/>
-          <circle cx="91.7" cy="154.5" r="91.7" fill="white"/>
-          <circle cx="374.3" cy="154.5" r="91.7" fill="white"/>
-          <rect x="128" width="210" height="309" rx="34" fill="white"/>
-          <ellipse cx="193.3" cy="84.4" rx="27" ry="27" fill="black"/>
-          <ellipse cx="276" cy="84.4" rx="27" ry="27" fill="black"/>
-          <rect x="166.3" y="157.2" width="136.9" height="38.3" rx="5" fill="black"/>
-          <rect x="166.9" y="235.1" width="136.2" height="37.6" rx="5" fill="black"/>
-        </mask>
-      </defs>
-      <rect width="466" height="309" fill="currentColor" mask="url(#bee-mask)"/>
-    </svg>
+    <div class="namleh-mark" role="img" aria-label="{{PRODUCT_NAME}}">{{NAMLEH_ICON}}</div>
     <div class="eyebrow">Authentication complete</div>
     <h1>You&rsquo;re signed in.</h1>
-    <p>You can close this window and return to Buzz.</p>
+    <p>You can close this window and return to {{PRODUCT_NAME}}.</p>
   </main>
 </body>
 </html>"#;
+
+fn auth_complete_html() -> String {
+    AUTH_COMPLETE_HTML
+        .replace(
+            "{{PRODUCT_NAME}}",
+            crate::app_identity::current().product_name,
+        )
+        .replace(
+            "{{NAMLEH_ICON}}",
+            include_str!("../icons/namleh/source/namleh-icon.svg"),
+        )
+}
 
 #[derive(Default)]
 pub(crate) struct BuilderlabSession(Mutex<Option<StoredSession>>);
@@ -206,7 +210,7 @@ async fn login_callback(
         let _ = sender.send(result);
     }
 
-    Html(AUTH_COMPLETE_HTML).into_response()
+    Html(auth_complete_html()).into_response()
 }
 
 fn api_url(path: &str) -> Result<Url, String> {
@@ -645,20 +649,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn auth_complete_page_uses_buzz_brand() {
+    fn auth_complete_page_uses_namleh_brand() {
+        let html = auth_complete_html();
         for expected in [
-            "<title>Buzz authentication complete</title>",
+            "<title>Namleh Buzz Dev authentication complete</title>",
             "#d7d72e",
             "#231e1e",
             "#d7e7f6",
-            "aria-label=\"Buzz\"",
-            "return to Buzz",
+            "aria-label=\"Namleh Buzz Dev\"",
+            "return to Namleh Buzz Dev",
+            "rgb(8,109,240)",
         ] {
             assert!(
-                AUTH_COMPLETE_HTML.contains(expected),
+                html.contains(expected),
                 "authentication complete page is missing {expected}"
             );
         }
+        assert!(!html.contains("bee-mask"));
     }
 
     #[test]

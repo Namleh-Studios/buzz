@@ -118,9 +118,21 @@ const config = {
   },
   bundle: {
     createUpdaterArtifacts: true,
+    icon: [
+      `icons/namleh/${environment}/32x32.png`,
+      `icons/namleh/${environment}/128x128.png`,
+      `icons/namleh/${environment}/128x128@2x.png`,
+      `icons/namleh/${environment}/icon.icns`,
+    ],
+    publisher: "Namleh Studios",
+    copyright:
+      "Copyright 2026 Block, Inc. Licensed under Apache-2.0; modifications Copyright 2026 Namleh Studios.",
     macOS: {
       minimumSystemVersion: "10.15",
       entitlements: `Entitlements.namleh.${environment}.plist`,
+      dmg: {
+        background: `icons/namleh/${environment}/dmg-background.png`,
+      },
     },
   },
 };

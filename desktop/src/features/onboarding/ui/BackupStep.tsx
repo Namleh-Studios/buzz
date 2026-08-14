@@ -7,7 +7,7 @@ import type { IdentityStorage } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { writeTextToClipboard } from "@/shared/lib/clipboard";
 import { Button } from "@/shared/ui/button";
-import { FuzzyLogo } from "@/shared/ui/buzz-logo/FuzzyLogo";
+import { NamlehAppMark } from "@/shared/ui/NamlehAppMark";
 import { Card } from "@/shared/ui/card";
 import { Spinner } from "@/shared/ui/spinner";
 import {
@@ -333,12 +333,10 @@ export function BackupStep({
           className="flex w-full flex-1 items-center justify-center py-10"
           data-testid="backup-intro-logo"
         >
-          <FuzzyLogo
-            ariaLabel="Creating your identity key"
-            className="w-20! text-foreground"
-            fuzz
-            loop
-            loopRestSeconds={0}
+          <NamlehAppMark
+            className="w-20!"
+            decorative={false}
+            label="Creating your identity key"
           />
         </div>
       ) : (

@@ -14,6 +14,7 @@ import {
 } from "./ThemePreviewFrame";
 import { NEUTRAL_ACCENT } from "./ThemeProvider";
 import { hexToHsl } from "./adaptive-theme";
+import { namlehAccentForTheme } from "./namleh-brand";
 
 export type ThemePreviewVarsByTheme = Partial<
   Record<SyntaxThemeName, ThemePreviewVars>
@@ -92,12 +93,16 @@ export function getThemeFallbackPreviewVars(name: SyntaxThemeName) {
 export function withAccentPreviewVars(
   vars: ThemePreviewVars | null,
   accentColor: string,
+  themeName?: string,
 ): ThemePreviewVars | null {
   if (!vars) {
     return null;
   }
 
-  if (accentColor === NEUTRAL_ACCENT) {
+  const effectiveAccent =
+    (themeName ? namlehAccentForTheme(themeName) : null) ?? accentColor;
+
+  if (effectiveAccent === NEUTRAL_ACCENT) {
     return {
       ...vars,
       "--primary": vars["--foreground"],
@@ -107,6 +112,9 @@ export function withAccentPreviewVars(
 
   return {
     ...vars,
-    "--primary": hexToHsl(accentColor),
+    "--primary": hexToHsl(effectiveAccent),
+    ...(themeName && namlehAccentForTheme(themeName)
+      ? { "--ring": hexToHsl(effectiveAccent) }
+      : {}),
   };
 }

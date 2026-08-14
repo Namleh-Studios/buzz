@@ -43,6 +43,7 @@ import {
   type LinkPreviewStyle,
 } from "@/shared/lib/linkPreviewStylePreference";
 import { cn } from "@/shared/lib/cn";
+import { APP_PRODUCT_NAME } from "@/shared/appIdentity";
 import { useCommunities } from "@/features/communities/useCommunities";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -251,6 +252,8 @@ export const settingsSections: SettingsSectionDescriptor[] = [
 ];
 
 function formatThemeLabel(name: string): string {
+  if (name === "buzz") return "Namleh";
+  if (name === "buzz-dark") return "Namleh Dark";
   return name
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -445,7 +448,7 @@ function ThemeSettingsCard() {
   const showCommunityScope = communities.length > 1;
   const communityLabel = appearanceCommunityLabel(activeCommunity?.name);
 
-  // Buzz themes pin a neutral accent (GitHub black in light, white in dark),
+  // Buzz themes pin the accessible Namleh accent for the active light/dark mode,
   // so the accent picker is hidden while a Buzz theme is active. `themeName` is
   // the effective theme, so this also covers System mode resolving to Buzz.
   const accentPickerHidden = isBuzzTheme(themeName);
@@ -467,6 +470,7 @@ function ThemeSettingsCard() {
     withAccentPreviewVars(
       previewVarsByTheme[name] ?? getThemeFallbackPreviewVars(name),
       accentColor,
+      name,
     );
 
   // All light themes (paired light + light-only)
@@ -542,7 +546,7 @@ function ThemeSettingsCard() {
     >
       <SettingsSectionHeader
         title="Appearance"
-        description="Choose a theme for Buzz."
+        description={`Choose a theme for ${APP_PRODUCT_NAME}.`}
       />
 
       {/* Mode, theme, and accent are saved per community
@@ -574,7 +578,7 @@ function ThemeSettingsCard() {
       ) : null}
 
       {/* Mode selector: System / Light / Dark */}
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {(
           [
             { mode: "system" as const, label: "System", Icon: SunMoon },
@@ -585,7 +589,7 @@ function ThemeSettingsCard() {
           <button
             aria-pressed={selectedMode === mode}
             className={cn(
-              "flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+              "flex shrink-0 items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
               selectedMode === mode
                 ? "border-primary bg-primary/10 text-foreground"
                 : "border-border/70 text-muted-foreground hover:border-border hover:text-foreground",
@@ -666,7 +670,7 @@ function ThemeSettingsCard() {
         </div>
       </div>
 
-      {/* Accent color picker — hidden for Buzz themes (pinned neutral accent).
+      {/* Accent color picker — hidden for Buzz themes (pinned brand accent).
           Reveal/hide with the translate-up + opacity fade defined by
           ACCENT_PICKER_TRANSITION above. Reduced motion skips the transition
           and just renders/unrenders. */}

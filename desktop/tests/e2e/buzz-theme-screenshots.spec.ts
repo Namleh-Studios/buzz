@@ -323,6 +323,8 @@ async function expectAppliedBuzzTheme(
           gradientBottom: styles
             .getPropertyValue("--buzz-gradient-bottom")
             .trim(),
+          primary: styles.getPropertyValue("--primary").trim(),
+          ring: styles.getPropertyValue("--ring").trim(),
         };
       }, THEME_STORAGE_KEY),
     )
@@ -330,8 +332,10 @@ async function expectAppliedBuzzTheme(
       storedTheme,
       isDark,
       buzzTheme: themeName,
-      gradientTop: isDark ? "#4a4616" : "#e6e6b6",
-      gradientBottom: isDark ? "#0a1423" : "#c4d0da",
+      gradientTop: isDark ? "#121b2a" : "#edf5ff",
+      gradientBottom: isDark ? "#05070b" : "#d7e3f2",
+      primary: isDark ? "206.5 100.00% 61.4%" : "219.7 89.52% 51.4%",
+      ring: isDark ? "206.5 100.00% 61.4%" : "219.7 89.52% 51.4%",
     });
 }
 
@@ -354,6 +358,35 @@ async function emitNativeThemeChange(page: Page, theme: "light" | "dark") {
   }, theme);
 }
 
+async function expectBrandAccessibility(page: Page, mode: "light" | "dark") {
+  const colors = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const channelLink = document.querySelector<HTMLButtonElement>(
+      '[data-testid="channel-general"]',
+    );
+    const channelStyles = channelLink ? getComputedStyle(channelLink) : null;
+    return {
+      primary: root.getPropertyValue("--primary").trim(),
+      ring: root.getPropertyValue("--ring").trim(),
+      statusAdded: root.getPropertyValue("--status-added").trim(),
+      statusDeleted: root.getPropertyValue("--status-deleted").trim(),
+      statusModified: root.getPropertyValue("--status-modified").trim(),
+      warning: root.getPropertyValue("--ui-warning").trim(),
+      channelColor: channelStyles?.color ?? "",
+    };
+  });
+
+  expect(colors.primary).toBe(
+    mode === "light" ? "219.7 89.52% 51.4%" : "206.5 100.00% 61.4%",
+  );
+  expect(colors.ring).toBe(colors.primary);
+  expect(
+    new Set([colors.statusAdded, colors.statusDeleted, colors.statusModified]),
+  ).toHaveProperty("size", 3);
+  expect(colors.warning).not.toBe(colors.primary);
+  expect(colors.channelColor).not.toBe("");
+}
+
 test("buzz light sidebar gradient", async ({ page }) => {
   await seedTheme(page, "buzz");
   await installMockBridge(page);
@@ -361,6 +394,7 @@ test("buzz light sidebar gradient", async ({ page }) => {
   await expectBuzzGradientPaint(page, "light");
   await expectBuzzSidebarPalette(page, "light");
   await expectBuzzContentShadow(page, "light");
+  await expectBrandAccessibility(page, "light");
   await expectIconlessSectionTitleAligned(page, "stream-list");
   await expectIconlessSectionTitleAligned(page, "dm-list");
   await waitForAnimations(page);
@@ -376,6 +410,7 @@ test("buzz dark sidebar gradient", async ({ page }) => {
   await expectBuzzGradientPaint(page, "dark");
   await expectBuzzSidebarPalette(page, "dark");
   await expectBuzzContentShadow(page, "dark");
+  await expectBrandAccessibility(page, "dark");
   await expectIconlessSectionTitleAligned(page, "stream-list");
   await expectIconlessSectionTitleAligned(page, "dm-list");
   await expect(page.locator("[data-buzz-content-surface]")).toHaveCSS(
@@ -456,6 +491,7 @@ test("appearance picker — light tab (Buzz)", async ({ page }) => {
   await seedTheme(page, "buzz");
   await installMockBridge(page);
   const panel = await openAppearance(page, "light");
+  await expect(page.getByTestId("theme-option-buzz")).toContainText("Namleh");
   await panel.screenshot({ path: `${SHOTS}/04-picker-light.png` });
 });
 
@@ -464,6 +500,55 @@ test("appearance picker — dark tab (Buzz Dark)", async ({ page }) => {
   await installMockBridge(page);
   const panel = await openAppearance(page, "dark");
   await panel.screenshot({ path: `${SHOTS}/05-picker-dark.png` });
+});
+
+test("staging marker stays readable at narrow width and 150% text zoom", async ({
+  page,
+}) => {
+  test.skip(
+    process.env.VITE_NAMLEH_APP_ENV !== "staging",
+    "staging-only treatment",
+  );
+  await page.setViewportSize({ width: 800, height: 500 });
+  await page.addInitScript(() => {
+    document.documentElement.style.fontSize = "24px";
+  });
+  await seedTheme(page, "buzz");
+  await installMockBridge(page);
+  await openChannel(page);
+  const marker = page.getByTestId("staging-indicator");
+  await expect(marker).toHaveText("STAGING");
+  const geometry = await marker.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const header = document.querySelector('[data-testid="chat-title"]');
+    const headerBox = header?.getBoundingClientRect();
+    return {
+      marker: {
+        top: box.top,
+        bottom: box.bottom,
+        left: box.left,
+        right: box.right,
+      },
+      headerTop: headerBox?.top ?? Number.POSITIVE_INFINITY,
+      viewportWidth: document.documentElement.clientWidth,
+      horizontalOverflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    };
+  });
+  expect(geometry.marker.top).toBeGreaterThanOrEqual(0);
+  expect(geometry.marker.left).toBeGreaterThanOrEqual(0);
+  expect(geometry.marker.right).toBeLessThanOrEqual(geometry.viewportWidth);
+  expect(geometry.marker.bottom).toBeLessThan(geometry.headerTop);
+  expect(geometry.horizontalOverflow).toBe(0);
+  for (const mode of ["system", "light", "dark"]) {
+    const box = await page.getByTestId(`appearance-mode-${mode}`).boundingBox();
+    expect(box).not.toBeNull();
+    if (box) {
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(800);
+    }
+  }
 });
 
 test("settings nav uses Buzz active pill + hover (light)", async ({ page }) => {
