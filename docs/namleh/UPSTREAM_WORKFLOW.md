@@ -31,7 +31,9 @@ git switch -c codex/<ticket>-<slug> origin/dev
 are protected against direct and force pushes. Production promotion or release
 requires explicit founder approval. OPS-196 establishes these source and
 approval boundaries; later fork-baseline tickets establish and prove the
-independent staging build, deployment, and production release wiring.
+independent staging build, deployment, and production release wiring. OPS-253
+adds the unsigned, SHA-bound staging identity artifact used by the Stage 1
+gate; OPS-217 owns the first Developer ID-signed and notarized preview.
 
 The repository follows the same lightweight PR contract as other Namleh
 projects:
