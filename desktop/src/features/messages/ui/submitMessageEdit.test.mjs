@@ -3,12 +3,7 @@ import test from "node:test";
 
 import { submitMessageEdit } from "./submitMessageEdit.ts";
 
-function baseOptions(
-  save,
-  {
-    content = "hello @Missing User",
-  } = {},
-) {
+function baseOptions(save, { content = "hello @Missing User" } = {}) {
   return {
     clearComposer: () => {},
     content,
