@@ -18,9 +18,9 @@ export default defineConfig({
   projects: [
     {
       name: "smoke",
-        testMatch: [
-          "**/smoke.spec.ts",
-          "**/sidebar-offcanvas-rail.spec.ts",
+      testMatch: [
+        "**/smoke.spec.ts",
+        "**/sidebar-offcanvas-rail.spec.ts",
         "**/onboarding-docked-cta-screenshots.spec.ts",
         "**/identity-key-help.spec.ts",
         "**/key-import-reveal.spec.ts",

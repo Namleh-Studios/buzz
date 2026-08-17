@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { waitForAnimations } from "../helpers/animations";
 import { installMockBridge } from "../helpers/bridge";
 
 const SHOTS = "test-results/sidebar-offcanvas-rail";
@@ -52,6 +53,7 @@ for (const theme of ["buzz", "buzz-dark", "vesper"]) {
     page,
   }) => {
     await setup(page, theme);
+    await waitForAnimations(page);
     await page.screenshot({ path: `${SHOTS}/${theme}-expanded.png` });
 
     await page.locator('[data-sidebar="trigger"]').first().click();
@@ -72,6 +74,7 @@ for (const theme of ["buzz", "buzz-dark", "vesper"]) {
     await expect(
       page.getByTestId(`community-rail-button-${COMMUNITY_B.id}`),
     ).toBeVisible();
+    await waitForAnimations(page);
     await page.screenshot({ path: `${SHOTS}/${theme}-collapsed.png` });
   });
 }
