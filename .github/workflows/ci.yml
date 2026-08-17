@@ -1139,8 +1139,8 @@ jobs:
         with:
           path: ${{ github.workspace }}/.cache/mesh-llama
           key: mesh-llama-${{ runner.os }}-metal-${{ steps.mesh_rev.outputs.rev }}
-      - name: Build Tauri app
-        run: cd desktop && pnpm tauri build
+      - name: Build Namleh staging identity preview
+        run: cd desktop && pnpm tauri:build:namleh-staging-preview
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
           MACOSX_DEPLOYMENT_TARGET: "10.15"
@@ -1148,3 +1148,17 @@ jobs:
           LLAMA_STAGE_BACKEND: metal
           LLAMA_STAGE_BUILD_DIR: ${{ github.workspace }}/.cache/mesh-llama/build-stage-abi-metal
           SKIPPY_LLAMA_AUTO_BUILD: "0"
+      - name: Package Namleh staging identity preview
+        run: |
+          scripts/package-namleh-staging-preview.sh \
+            "desktop/src-tauri/target/release/bundle/macos/Namleh Buzz Staging.app" \
+            "$RUNNER_TEMP/namleh-staging-preview" \
+            "$GITHUB_SHA"
+      - name: Upload Namleh staging identity preview
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: namleh-buzz-staging-macos-${{ github.sha }}
+          path: ${{ runner.temp }}/namleh-staging-preview
+          if-no-files-found: error
+          retention-days: 30

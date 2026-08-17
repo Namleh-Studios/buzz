@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { createNamlehReleaseEnvironment } from "../desktop/scripts/namleh-release-environment.mjs";
+import { createNamlehStagingPreviewEnvironment } from "../desktop/scripts/namleh-staging-preview-environment.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const readJson = (path) =>
@@ -35,6 +36,60 @@ function icnsTypes(path) {
 
 const identities = readJson("desktop/namleh-app-identities.json");
 const environments = ["development", "staging", "production"];
+
+const previewEnvironment = createNamlehStagingPreviewEnvironment({
+  parentEnvironment: {
+    APPLE_SIGNING_IDENTITY: "must-be-removed",
+    BUZZ_UPDATER_ENDPOINT: "must-be-removed",
+    BUZZ_UPDATER_PUBLIC_KEY: "must-be-removed",
+    NAMLEH_PRODUCTION_UPDATER_ENDPOINT: "must-be-removed",
+    NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY: "must-be-removed",
+    NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY_PASSWORD: "must-be-removed",
+    NAMLEH_PRODUCTION_UPDATER_PUBLIC_KEY: "must-be-removed",
+    NAMLEH_STAGING_UPDATER_ENDPOINT: "must-be-removed",
+    NAMLEH_STAGING_UPDATER_PRIVATE_KEY: "must-be-removed",
+    NAMLEH_STAGING_UPDATER_PRIVATE_KEY_PASSWORD: "must-be-removed",
+    NAMLEH_STAGING_UPDATER_PUBLIC_KEY: "must-be-removed",
+    TAURI_SIGNING_PRIVATE_KEY: "must-be-removed",
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "must-be-removed",
+  },
+  identities,
+});
+assert.equal(previewEnvironment.NAMLEH_APP_ENV, "staging");
+assert.equal(previewEnvironment.NAMLEH_STAGING_IDENTITY_PREVIEW, "1");
+assert.equal(previewEnvironment.VITE_NAMLEH_APP_ENV, "staging");
+assert.equal(
+  previewEnvironment.VITE_NAMLEH_DEEP_LINK_SCHEME,
+  identities.staging.deepLinkScheme,
+);
+for (const variable of [
+  "APPLE_SIGNING_IDENTITY",
+  "BUZZ_UPDATER_ENDPOINT",
+  "BUZZ_UPDATER_PUBLIC_KEY",
+  "NAMLEH_PRODUCTION_UPDATER_ENDPOINT",
+  "NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY",
+  "NAMLEH_PRODUCTION_UPDATER_PRIVATE_KEY_PASSWORD",
+  "NAMLEH_PRODUCTION_UPDATER_PUBLIC_KEY",
+  "NAMLEH_STAGING_UPDATER_ENDPOINT",
+  "NAMLEH_STAGING_UPDATER_PRIVATE_KEY",
+  "NAMLEH_STAGING_UPDATER_PRIVATE_KEY_PASSWORD",
+  "NAMLEH_STAGING_UPDATER_PUBLIC_KEY",
+  "TAURI_SIGNING_PRIVATE_KEY",
+  "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+]) {
+  assert.equal(previewEnvironment[variable], undefined);
+}
+const stagingPreviewRunner = read(
+  "desktop/scripts/run-namleh-staging-preview.mjs",
+);
+assert.match(stagingPreviewRunner, /tauri\.namleh\.staging\.conf\.json/);
+assert.doesNotMatch(stagingPreviewRunner, /production/);
+const stagingPreviewWorkflow = read(".github/workflows/ci.yml");
+assert.match(stagingPreviewWorkflow, /pnpm tauri:build:namleh-staging-preview/);
+assert.match(
+  stagingPreviewWorkflow,
+  /namleh-buzz-staging-macos-\$\{\{ github\.sha \}\}/,
+);
 const uniqueFields = [
   "productName",
   "bundleIdentifier",
@@ -126,7 +181,11 @@ const generatedAssetHashes = {
     "df1d6d57d5924965dc30dc3cfa307057c73993c651bde0de8af769648560c74c",
 };
 for (const [path, expectedHash] of Object.entries(generatedAssetHashes)) {
-  assert.equal(sha256(path), expectedHash, `${path} must match approved output`);
+  assert.equal(
+    sha256(path),
+    expectedHash,
+    `${path} must match approved output`,
+  );
 }
 assert.deepEqual(
   pngDimensions(
@@ -208,7 +267,9 @@ for (const identity of Object.values(identities)) {
   assert.ok(rendererIdentity.includes(identity.deepLinkScheme));
 }
 assert.ok(read("desktop/src/main.tsx").includes("APP_PRODUCT_NAME"));
-assert.ok(read("desktop/src-tauri/src/huddle/window.rs").includes("product_name"));
+assert.ok(
+  read("desktop/src-tauri/src/huddle/window.rs").includes("product_name"),
+);
 assert.ok(
   read("desktop/src-tauri/capabilities/default.json").includes(
     "core:window:allow-set-title",

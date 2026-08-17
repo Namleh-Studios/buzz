@@ -22,6 +22,7 @@
     "test:e2e:integration": "pnpm build:e2e && playwright test --project=integration",
     "test:e2e:report": "playwright show-report",
     "tauri:build": "tauri build",
+    "tauri:build:namleh-staging-preview": "node scripts/run-namleh-staging-preview.mjs",
     "tauri:build:namleh-staging": "node scripts/run-namleh-tauri.mjs staging",
     "tauri:build:namleh-production": "node scripts/run-namleh-tauri.mjs production"
   },

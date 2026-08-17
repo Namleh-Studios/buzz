@@ -32,6 +32,7 @@ fn validate_namleh_updater_endpoint(environment: &str, endpoint: &str) {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=NAMLEH_APP_ENV");
+    println!("cargo:rerun-if-env-changed=NAMLEH_STAGING_IDENTITY_PREVIEW");
     println!("cargo:rerun-if-env-changed=BUZZ_RELAY_URL");
     println!("cargo:rerun-if-env-changed=BUZZ_RELAY_HTTP");
     println!("cargo:rerun-if-env-changed=BUZZ_UPDATER_PUBLIC_KEY");
@@ -59,6 +60,10 @@ fn main() {
         );
     }
     println!("cargo:rustc-env=NAMLEH_DESKTOP_APP_ENV={app_environment}");
+    let staging_identity_preview = std::env::var_os("NAMLEH_STAGING_IDENTITY_PREVIEW").is_some();
+    if staging_identity_preview && app_environment != "staging" {
+        panic!("NAMLEH_STAGING_IDENTITY_PREVIEW is valid only for staging builds");
+    }
 
     // Explicit owner-only agent-access capability. Release packaging sets this
     // presence-only marker; OSS/custom builds leave agent access configurable.
@@ -156,6 +161,10 @@ fn main() {
     if app_environment == "development" {
         if updater_public_key.is_some() || updater_endpoint.is_some() {
             panic!("development builds must not enable the updater");
+        }
+    } else if staging_identity_preview {
+        if updater_public_key.is_some() || updater_endpoint.is_some() {
+            panic!("staging identity previews must not enable the updater");
         }
     } else {
         let (scoped_public_key_name, scoped_endpoint_name) = match app_environment.as_str() {
