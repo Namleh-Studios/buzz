@@ -127,9 +127,144 @@ not applicable. `Defer` names the ticket that owns any later adaptation.
 | `98d3d77b4` mobile composer regression fixes | Important bug fix | Boundary review under OPS-229. |
 | `45f4b91a3` compact link-preview cards | Product/UI decision | Boundary review under OPS-229 with the preview fixes; do not overwrite Namleh deep-link handling. |
 
+## OPS-229 Stage 1 boundary checkpoint
+
+Reviewed on 2026-08-16 before the next product stage:
+
+- Previous checkpoint: `45f4b91a36145f2ce642548c34f699f1b529bcf5`
+- Reviewed upstream checkpoint: `f956e6fe06a76e50cbd8fba1a162482e752e7f1a`
+- Exact range: `45f4b91a3..f956e6fe0`
+- Range size: 42 commits; 458 files changed, 35,715 insertions, and 7,185
+  deletions.
+- Namleh `dev` at review start: `8e1abee827f6ed55b52b738599edebd22bfb29d4`
+- `git cherry 8e1abee82 f956e6fe0 45f4b91a3` reported `+` for all 42
+  commits; none was patch-equivalent to a commit already in Namleh `dev`.
+- Namleh `dev` passed all 23 jobs in
+  [run 31758105485](https://github.com/Namleh-Studios/buzz/actions/runs/31758105485).
+- Upstream [run 31955623769](https://github.com/block/buzz/actions/runs/31955623769)
+  failed `Desktop Core` and its aggregate only. The failure is a stochastic
+  assertion in unchanged test
+  `key_backup::tests::generated_passphrase_respects_word_count_and_separator`:
+  the test splits a random EFF word-list passphrase on separators that can also
+  occur inside a selected word. The same run passed security, mobile, macOS,
+  Windows, all desktop smoke/integration shards, relay/backend E2E, and web.
+  This is explained upstream test debt, not Namleh fork drift; the gate does
+  not represent the upstream checkpoint as wholly green.
+
+Three applicable fixes were selected. They remain separate from this gate PR:
+
+- `bcf353c96` and `d8281b9c9` are the OPS-252 security port in
+  [PR 9](https://github.com/Namleh-Studios/buzz/pull/9), merged to `dev` as
+  `5d091b872353d7e5564bc3fc3364770d5f677dad` after all 14 applicable PR
+  jobs passed in
+  [run 31991372478](https://github.com/Namleh-Studios/buzz/actions/runs/31991372478).
+- `78cbffeb6` is the OPS-254 visual-correctness port in
+  [PR 11](https://github.com/Namleh-Studios/buzz/pull/11), merged to `dev` as
+  `a6a848827fdb5081c62b0a726588415bdc455bd1`. Its three new collapsed-rail
+  smoke cases passed for Buzz light, Buzz dark, and Vesper. An unrelated
+  pre-existing virtualization timing failure in the first run did not recur;
+  the failed-job rerun completed with 13 successful jobs and zero failures in
+  [run 31991849636](https://github.com/Namleh-Studios/buzz/actions/runs/31991849636).
+
+OPS-253 is not an upstream port. It closes the separate Stage 1 evidence gap by
+producing a SHA-bound unsigned staging macOS identity artifact in
+[PR 10](https://github.com/Namleh-Studios/buzz/pull/10), merged to `dev` as
+`902b9647a27f1e323f10400d5bd6f74236b37ed6` after all 22 applicable PR
+jobs passed in
+[run 31991685033](https://github.com/Namleh-Studios/buzz/actions/runs/31991685033).
+Signing, notarization, updater signing, and functional signed-Keychain
+validation remain OPS-217.
+
+The first `dev` artifact was produced by
+[run 31992930932](https://github.com/Namleh-Studios/buzz/actions/runs/31992930932),
+which passed all 23 jobs. Artifact
+`namleh-buzz-staging-macos-902b9647a27f1e323f10400d5bd6f74236b37ed6`
+(ID `9276237932`) is bound to that source SHA. Downloaded inspection confirmed
+product name `Namleh Buzz Staging`, bundle identifier
+`com.namlehstudios.buzz.staging`, URL scheme `namleh-buzz-staging`, no
+`_CodeSignature` payload, and manifest flags `developerIdSigned: false` and
+`distributable: false`. Its archive SHA-256
+`3119c3df61d877a82cbf3e7a3b249bfb3c82f4d86d66f86bfb8e80522342f1f5`
+matched the manifest. The temporary local download was deleted after
+inspection.
+
+Live repository-policy revalidation on 2026-08-17 confirmed that `dev` and
+`main` still require pull requests, resolved conversations, linear history,
+and administrator enforcement with zero required approvals, no required
+status contexts, and no force-push or deletion. GitHub Actions cannot approve
+pull requests. `staging` accepts only `dev`; `production` accepts only `main`,
+requires Steven's approval, allows the sole founder to approve his requested
+deployment, and disallows administrator bypass. The repository remains
+squash-only with `dev` as default and automatic merged-branch deletion.
+
+The final integrated Stage 1 source is
+`a6a848827fdb5081c62b0a726588415bdc455bd1`. All 23 jobs passed in
+[run 31994066105](https://github.com/Namleh-Studios/buzz/actions/runs/31994066105),
+including security, mobile, macOS and Windows builds, Desktop Core, all four
+desktop smoke shards, both desktop integration shards, backend integration,
+and relay E2E. That run also retained artifact
+`namleh-buzz-staging-macos-a6a848827fdb5081c62b0a726588415bdc455bd1`
+(ID `9276640396`), proving the staging identity path still packages after all
+selected ports are integrated.
+
+### Stage 1 range classification
+
+| Commit | Classification | Stage 1 decision |
+|---|---|---|
+| `2693e0db1` authoritative workflow run history | Architecture/migration | Do not port during the baseline gate; it adds workflow storage/API semantics and migration `0031`, which require their own product owner. |
+| `b269e8df7` compact-preview geometry fixture proxy | Test-only upstream fix | No port. It repairs upstream's prior fixture failure; current Namleh smoke coverage is green. |
+| `bcf353c96` agent mention send-boundary authorization | Critical security | Port before gate under OPS-252. Fresh authorization is required immediately before message, forum, deferred-upload, and edit publication. |
+| `514195b1d` Inbox message deletion | Product feature | Out of scope for Stage 1. |
+| `e0940927f` complete rosters above 1,000 members | Important scale correctness | Reviewed but not applicable to the clean two-member baseline. Reassess at the next boundary before large-community rollout. |
+| `76f114a25` deterministic desktop release smoke | Release infrastructure | Defer to OPS-217; it owns the first signed/notarized preview and release smoke. |
+| `0571f5455` glass Huddle tray polish | Product/UI change | Out of scope; preserve the approved bounded Namleh theme. |
+| `c8da06c5e` faster initial direct messages | Compatible performance fix | Reviewed, not gate-critical; reconsider at the next boundary. |
+| `068a83b09` env-gated Huddle latency levers | Runtime/product decision | Do not inherit new voice-runtime knobs during the baseline gate. |
+| `eedcd886a` compact-preview thumbnail corners | Product/UI polish | Out of scope. |
+| `0f61f24ad` mobile channel-scroll interruption | Important mobile bug fix | Reviewed, not Mac-first gate-critical; reconsider at the next boundary. |
+| `574356289` isolate Huddle speaker-level updates | Compatible performance fix | Reviewed, not gate-critical; reconsider with Huddle performance work. |
+| `b30f1f612` mobile profile/DM/sheet polish | Product/UI change | Out of scope. |
+| `df9e773a1` demand-scoped desktop presence | Compatible performance fix | Reviewed, not gate-critical; reconsider at the next boundary. |
+| `ea0960f8d` immediate spoken Huddle reply wording | Product behavior | Out of scope. |
+| `8b8445f5e` shared `useNow` timer | Compatible performance fix | Reviewed, not gate-critical; reconsider at the next boundary. |
+| `43e53fc34` standardized settings layout | Structural UI change | Do not port; Stage 1 branding permits token/identity changes, not an unrelated settings redesign. |
+| `34a7f2fb9` unified agent profile content | Product/UI change | Defer to the native-tools stage rather than expanding Stage 1. |
+| `17977814d` observer journal low-water eviction | Compatible performance fix | Reviewed, not gate-critical; reconsider with observer/runtime work. |
+| `caa64b5e8` unified relative-date ladder | Product/UI change | Out of scope. |
+| `1d51081b8` agent product-intent prompt | Prompt/product policy | Do not port wholesale; Namleh agent intent and prompt provenance are owned by the native-tools stage. |
+| `17d2147ec` video-comment effect wrapping | Important feature-specific bug fix | Reviewed, not gate-critical; reconsider with video-review work. |
+| `5acb93082` desktop permalink chips | Product/deep-link change | Out of scope; it requires a separate Namleh-scheme adaptation. |
+| `fd0ab47a1` composer link-preview refetch | Important bug fix | Reviewed, not gate-critical; reconsider at the next boundary. |
+| `dbee2914a` await channel E2E bridge readiness | Test stabilization | No port required; current Namleh channel E2E is green. |
+| `5ddf23d70` mobile permalink chips | Product/deep-link change | Out of scope. |
+| `207154706` channel message path links | Compatible bug fix | Reviewed, not gate-critical; any later port must preserve Namleh schemes. |
+| `01f76ec97` reduce polling/read-state echo | Compatible performance fix | Reviewed, not gate-critical; reconsider at the next boundary. |
+| `f086eb654` background link-preview preparation | Product/architecture change | Do not port during the gate; it is a broad composer/media workflow change. |
+| `757779bb1` incremental active turns | Compatible performance fix | Reviewed, not gate-critical; reconsider with native-tool activity work. |
+| `0bb7c60f8` unwrap mobile observer telemetry batches | Important mobile correctness fix | Reviewed, not Mac-first gate-critical; reconsider with mobile agent activity. |
+| `1f4c69ecc` Desktop 0.5.12 release | Release metadata | Out of scope. |
+| `122a8b898` Projects v3 | Large product feature | Out of scope for the approved workspace baseline. |
+| `263c9bf76` restore agent mint button | Product/UI fix | Defer to the native-tools product stage. |
+| `09768100e` release Playwright quoting | Release CI fix | Defer to OPS-217 with the release workflow it affects. |
+| `51beba603` Desktop 0.5.13 release | Release metadata | Out of scope. |
+| `1b3dbcaae` remove desktop smoke release gate | Release policy change | Reject for Stage 1; do not weaken the future Namleh release gate. |
+| `82f7ed153` Desktop 0.5.14 release | Release metadata | Out of scope. |
+| `69107dc3b` mobile thread/composer polish | Product/UI change | Out of scope. |
+| `78cbffeb6` collapsed sidebar paints over community rail | Important visual correctness | Port before gate under OPS-254; it directly breaks the approved multi-community rail in Namleh and third-party themes. |
+| `d8281b9c9` device authentication for identity export | Critical security | Port before gate under OPS-252. Secret identity export must require fresh device authorization and fail closed. |
+| `f956e6fe0` refreshed agent-development guidance | Documentation policy | Do not port; the Namleh fork's `AGENTS.md` and Docker-free workflow remain authoritative. |
+
 ## Dependency and license boundary
 
 OPS-198 selects no new dependency and imports no third-party source.
+
+The OPS-229 boundary selects one new direct dependency through OPS-252:
+Flutter `local_auth 3.0.2`, distributed under the Flutter project's BSD
+3-Clause license. Its locked platform implementations are required only for
+fresh on-device authorization of mobile identity export. OPS-252 records the
+exact lockfile delta and reruns mobile analysis/tests plus hosted dependency
+and build checks. The desktop authorization port and sidebar fix add no
+dependency, migration, event kind, or protocol change.
 
 - Current Namleh Security CI includes the repository dependency policy and is
   required to pass at the checkpoint, but currently scans only the root
@@ -148,6 +283,22 @@ OPS-198 selects no new dependency and imports no third-party source.
   event-kind, API, storage, or license delta in its own PR.
 
 ## Conflict and adaptation evidence
+
+For the OPS-229 boundary, patch checks against Namleh `dev` found:
+
+- `bcf353c96` conflicted in `submitMessageEdit` because Namleh intentionally
+  lacks unrelated upstream reference-mention behavior. OPS-252 retained the
+  current edit model and adapted only the new fresh-authorization call and its
+  immediate/deferred-send tests.
+- `d8281b9c9` applied to product code. One upstream widget test referenced an
+  unported `invitePageBuilder` parameter, so OPS-252 removed only that unrelated
+  test argument and retained all device-auth assertions.
+- `78cbffeb6` applied to the sidebar. Its Playwright registration conflicted
+  with Namleh's different smoke list; OPS-254 registered only the new regression
+  spec and added the fork-required animation waits before screenshots.
+
+No accepted port touches the Namleh bundle identifiers, updater/signing
+configuration, Keychain namespaces, branding assets, or remote policy.
 
 A read-only three-way merge comparison used baseline `f8f2ef044`, Namleh
 `dev` at `aeda6825e`, and upstream `45f4b91a3`. A wholesale merge would
@@ -169,6 +320,24 @@ full before deciding whether to cherry-pick them; a clean patch application is
 not approval.
 
 ## Verified review procedure
+
+The OPS-229 boundary used exact immutable endpoints and stopped if the previous
+checkpoint was not an ancestor:
+
+```bash
+. ./bin/activate-hermit
+scripts/configure-namleh-remotes.sh
+git fetch upstream main --prune
+git fetch origin dev --prune
+git merge-base --is-ancestor 45f4b91a3 f956e6fe0
+git log --reverse --oneline 45f4b91a3..f956e6fe0
+git diff --stat 45f4b91a3..f956e6fe0
+git cherry 8e1abee82 f956e6fe0 45f4b91a3
+```
+
+The range contained exactly 42 commits and all were classified above. The
+three accepted commits use dedicated PRs based on `origin/dev`; no upstream
+branch was merged.
 
 The checkpoint was produced with the fork's push guard active:
 

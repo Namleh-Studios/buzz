@@ -62,7 +62,9 @@ test. Existing upstream application data remained present under
 `~/Library/WebKit/xyz.block.buzz.app`, and
 `~/Library/Caches/xyz.block.buzz.app`; OPS-196 did not launch, install, reset,
 update, remove, or modify the released application. OPS-197 owns the independent
-Namleh application identity and the executable side-by-side proof.
+Namleh application identity. Because the owner confirmed there is no released
+upstream app to install beside it, the first signed install/upgrade/rollback and
+executable coexistence proof remain owned by OPS-217.
 
 ## Compatibility evidence map
 
