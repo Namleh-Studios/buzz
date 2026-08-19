@@ -45,8 +45,8 @@ pg_dump \
   --compress 9 \
   --no-owner \
   --no-privileges \
-  --file "$work_dir/database.dump"
-pg_restore --list "$work_dir/database.dump" >/dev/null
+  >"$work_dir/database.dump"
+pg_restore --list <"$work_dir/database.dump" >/dev/null
 
 if [[ "$(psql "$database_url" --no-psqlrc --tuples-only --no-align --command "SELECT to_regclass('_sqlx_migrations') IS NOT NULL;")" == "t" ]]; then
   migration_count="$(psql "$database_url" --no-psqlrc --tuples-only --no-align --command "SELECT count(*) FROM _sqlx_migrations WHERE success;")"
@@ -80,8 +80,9 @@ for file in database.dump database.dump.sha256 metadata.json; do
   aws s3 cp \
     --only-show-errors \
     --endpoint-url "$endpoint" \
-    "$work_dir/$file" \
-    "s3://${bucket}/${object_prefix}/${file}"
+    - \
+    "s3://${bucket}/${object_prefix}/${file}" \
+    <"$work_dir/$file"
 done
 
 backup_index=0

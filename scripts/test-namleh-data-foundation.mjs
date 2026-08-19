@@ -90,4 +90,16 @@ const productionRestore = readFileSync(
 assert.match(productionRestore, /^    environment: production$/m);
 assert.match(productionRestore, /inputs\.confirmation == 'RESTORE PRODUCTION DATA'/);
 
+const backupWorkflow = readFileSync(
+  resolve(root, ".github/workflows/namleh-data-backup.yml"),
+  "utf8",
+);
+for (const workflow of [backupWorkflow, productionRestore]) {
+  assert.match(
+    workflow,
+    /ghcr\.io\/bitwarden\/bws:2\.1\.0@sha256:[a-f0-9]{64}/,
+  );
+  assert.doesNotMatch(workflow, /bitwarden\/sm-action/);
+}
+
 console.log("Namleh data foundation contract passed");

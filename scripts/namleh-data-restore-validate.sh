@@ -70,16 +70,16 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf -- "$work_dir"' EXIT
 checksum_key="${backup_key%database.dump}database.dump.sha256"
 metadata_key="${backup_key%database.dump}metadata.json"
-aws s3 cp --only-show-errors --endpoint-url "$endpoint" "s3://${bucket}/${backup_key}" "$work_dir/database.dump"
-aws s3 cp --only-show-errors --endpoint-url "$endpoint" "s3://${bucket}/${checksum_key}" "$work_dir/database.dump.sha256"
-aws s3 cp --only-show-errors --endpoint-url "$endpoint" "s3://${bucket}/${metadata_key}" "$work_dir/metadata.json"
+aws s3 cp --only-show-errors --endpoint-url "$endpoint" "s3://${bucket}/${backup_key}" - >"$work_dir/database.dump"
+aws s3 cp --only-show-errors --endpoint-url "$endpoint" "s3://${bucket}/${checksum_key}" - >"$work_dir/database.dump.sha256"
+aws s3 cp --only-show-errors --endpoint-url "$endpoint" "s3://${bucket}/${metadata_key}" - >"$work_dir/metadata.json"
 (
   cd "$work_dir"
   sha256sum --check database.dump.sha256
 )
 [[ "$(jq -r '.sha256' "$work_dir/metadata.json")" == "$(cut -d ' ' -f 1 "$work_dir/database.dump.sha256")" ]]
 [[ "$(jq -r '.sizeBytes' "$work_dir/metadata.json")" == "$(wc -c <"$work_dir/database.dump" | tr -d ' ')" ]]
-pg_restore --list "$work_dir/database.dump" >/dev/null
+pg_restore --list <"$work_dir/database.dump" >/dev/null
 psql "$restore_database_url" \
   --no-psqlrc \
   --set ON_ERROR_STOP=1 \
@@ -89,7 +89,7 @@ pg_restore \
   --no-owner \
   --no-privileges \
   --exit-on-error \
-  "$work_dir/database.dump"
+  <"$work_dir/database.dump"
 
 if [[ "$restore_mode" == "production" ]]; then
   psql "$restore_database_url" \
