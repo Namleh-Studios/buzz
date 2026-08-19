@@ -1003,6 +1003,9 @@ jobs:
       contents: read
     env:
       TARGET: x86_64-pc-windows-msvc
+    defaults:
+      run:
+        shell: cmd
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       # MSVC needs windows.h (aws-lc-sys et al.), so this runs on a real Windows
@@ -1023,53 +1026,34 @@ jobs:
       # Windows naming (binaries/<bin>-<triple>.exe); empty files suffice for a
       # type-check since nothing executes them.
       - name: Create sidecar placeholders
-        shell: powershell
         run: |
-          $binaryDirectory = "desktop/src-tauri/binaries"
-          New-Item -ItemType Directory -Force -Path $binaryDirectory | Out-Null
-          foreach ($binary in @("buzz-acp", "buzz-agent", "buzz-dev-mcp", "git-credential-nostr", "buzz")) {
-            New-Item -ItemType File -Force -Path "$binaryDirectory/$binary-$env:TARGET.exe" | Out-Null
-          }
+          if not exist desktop\src-tauri\binaries mkdir desktop\src-tauri\binaries
+          for %%B in (buzz-acp buzz-agent buzz-dev-mcp git-credential-nostr buzz) do type nul > "desktop\src-tauri\binaries\%%B-%TARGET%.exe"
       - name: Clippy (workspace)
-        run: cargo clippy --workspace --all-targets --target $env:TARGET -- -D warnings
+        run: cargo clippy --workspace --all-targets --target %TARGET% -- -D warnings
       - name: Check (workspace)
-        run: cargo check --workspace --all-targets --target $env:TARGET
+        run: cargo check --workspace --all-targets --target %TARGET%
       - name: Test (buzz-dev-mcp)
         # The Windows-only bash resolver lives in buzz-dev-mcp; its unit tests
         # only gate if this crate is tested ON Windows.
         # Serial: windows_resolver_tests mutate process-global env
         # (BUZZ_SHELL/GIT_BASH/SystemRoot) that SharedState::new reads.
-        run: cargo test -p buzz-dev-mcp --target $env:TARGET -- --test-threads=1
+        run: cargo test -p buzz-dev-mcp --target %TARGET% -- --test-threads=1
       # Smoke-test the new host-prereq contract: Git for Windows (which provides
       # bash) is available on the runner, a shell command round-trips, and bash
       # does NOT resolve from System32 (so WSL's launcher is never picked up).
       # The homelab runner has Git for Windows installed; the unit tests above
       # exercise the MCP resolver itself. This step verifies the host env.
       - name: Smoke-test host Git Bash prereq (host env check)
-        shell: powershell
         run: |
-          $bashPath = "C:\Program Files\Git\bin\bash.exe"
-          if (-not (Test-Path $bashPath)) {
-            throw "Git for Windows bash is missing at $bashPath"
-          }
-          Write-Host "Resolved bash: $bashPath"
-
-          $output = & $bashPath -c 'echo hello | tr a-z A-Z'
-          if ($LASTEXITCODE -ne 0 -or $output.Trim() -ne "HELLO") {
-            throw "bash pipeline failed: got '$output'"
-          }
-
-          & $bashPath -c 'set -euo pipefail; git --version; repo=$(mktemp -d); cd "$repo"; git init -q; git -c user.name=ci -c user.email=ci@example.com commit -q --allow-empty -m smoke; git log -1 --format=%s | grep -qx smoke'
-          if ($LASTEXITCODE -ne 0) {
-            throw "Git Bash commit round-trip failed"
-          }
-          Write-Host "Host bash resolved and functional; git commit round-trip passed"
+          if not exist "C:\Program Files\Git\bin\bash.exe" exit /b 1
+          "C:\Program Files\Git\bin\bash.exe" scripts/test-windows-git-bash.sh
       - name: Check (Tauri crate)
-        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --workspace --all-targets --target $env:TARGET
+        run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --workspace --all-targets --target %TARGET%
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
       - name: Test (Tauri crate)
-        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --target $env:TARGET
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --target %TARGET%
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
