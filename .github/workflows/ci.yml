@@ -147,7 +147,7 @@ jobs:
 
   desktop-core:
     name: Desktop Core
-    runs-on: [self-hosted, linux, home-lab]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [changes]
     if: github.event_name == 'push' || needs.changes.outputs.desktop == 'true' || needs.changes.outputs.desktop-rust == 'true' || needs.changes.outputs.rust == 'true'
