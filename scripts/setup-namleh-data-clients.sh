@@ -8,6 +8,7 @@ client_bin="${RUNNER_TEMP}/namleh-data-clients"
 install -d -m 0755 "$client_bin"
 
 for client in pg_dump pg_restore psql; do
+  # shellcheck disable=SC1003,SC2016 # Write deferred wrapper expressions verbatim.
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
@@ -20,6 +21,7 @@ for client in pg_dump pg_restore psql; do
   chmod 0755 "${client_bin}/${client}"
 done
 
+# shellcheck disable=SC1003,SC2016 # Write deferred wrapper expressions verbatim.
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
