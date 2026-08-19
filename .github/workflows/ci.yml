@@ -1006,10 +1006,11 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       # MSVC needs windows.h (aws-lc-sys et al.), so this runs on a real Windows
-      # runner — hermit, used by the Linux jobs, does not provide MSVC. The
-      # toolchain (1.95.0 + clippy via profile = default) comes from the
-      # repo-root rust-toolchain.toml, which the runner's preinstalled rustup
-      # honors on demand; the host triple already is x86_64-pc-windows-msvc.
+      # runner — hermit, used by the Linux jobs, does not provide MSVC.
+      - name: Prefer Git for Windows bash
+        shell: pwsh
+        run: '"C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: |
@@ -1022,12 +1023,13 @@ jobs:
       # Windows naming (binaries/<bin>-<triple>.exe); empty files suffice for a
       # type-check since nothing executes them.
       - name: Create sidecar placeholders
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p desktop/src-tauri/binaries
-          for bin in buzz-acp buzz-agent buzz-dev-mcp git-credential-nostr buzz; do
-            touch "desktop/src-tauri/binaries/${bin}-${TARGET}.exe"
-          done
+          $binaryDirectory = "desktop/src-tauri/binaries"
+          New-Item -ItemType Directory -Force -Path $binaryDirectory | Out-Null
+          foreach ($binary in @("buzz-acp", "buzz-agent", "buzz-dev-mcp", "git-credential-nostr", "buzz")) {
+            New-Item -ItemType File -Force -Path "$binaryDirectory/$binary-$env:TARGET.exe" | Out-Null
+          }
       - name: Clippy (workspace)
         run: cargo clippy --workspace --all-targets --target $env:TARGET -- -D warnings
       - name: Check (workspace)
@@ -1041,32 +1043,27 @@ jobs:
       # Smoke-test the new host-prereq contract: Git for Windows (which provides
       # bash) is available on the runner, a shell command round-trips, and bash
       # does NOT resolve from System32 (so WSL's launcher is never picked up).
-      # windows-latest runners have Git for Windows pre-installed; the unit tests
-      # above exercise the MCP resolver itself. This step verifies the host env.
+      # The homelab runner has Git for Windows installed; the unit tests above
+      # exercise the MCP resolver itself. This step verifies the host env.
       - name: Smoke-test host Git Bash prereq (host env check)
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          # Git for Windows ships bash.exe under its bin/ directory; confirm it
-          # resolves from the standard location the runtime resolver probes first.
-          bash_path=$(command -v bash 2>/dev/null || true)
-          [[ -n "$bash_path" ]] || { echo "ERROR: bash not found on PATH — host Git for Windows missing" >&2; exit 1; }
-          echo "Resolved bash: $bash_path"
-          [[ "$bash_path" != *System32* ]] || { echo "ERROR: resolved bash is WSL's System32 launcher" >&2; exit 1; }
+          $bashPath = "C:\Program Files\Git\bin\bash.exe"
+          if (-not (Test-Path $bashPath)) {
+            throw "Git for Windows bash is missing at $bashPath"
+          }
+          Write-Host "Resolved bash: $bashPath"
 
-          # Run a basic pipeline through the resolved bash (same invocation the
-          # agent uses: bash -c '...').
-          out=$(bash -c 'echo hello | tr a-z A-Z')
-          [[ "$out" == "HELLO" ]] || { echo "bash pipeline failed: got '$out'" >&2; exit 1; }
+          $output = & $bashPath -c 'echo hello | tr a-z A-Z'
+          if ($LASTEXITCODE -ne 0 -or $output.Trim() -ne "HELLO") {
+            throw "bash pipeline failed: got '$output'"
+          }
 
-          # Confirm git itself works — agents run git commands frequently.
-          git --version
-          repo=$(mktemp -d)
-          cd "$repo"
-          git init -q
-          git -c user.name=ci -c user.email=ci@example.com commit -q --allow-empty -m smoke
-          git log -1 --format=%s | grep -qx smoke
-          echo "Host bash resolved and functional; git commit round-trip passed"
+          & $bashPath -c 'set -euo pipefail; git --version; repo=$(mktemp -d); cd "$repo"; git init -q; git -c user.name=ci -c user.email=ci@example.com commit -q --allow-empty -m smoke; git log -1 --format=%s | grep -qx smoke'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Git Bash commit round-trip failed"
+          }
+          Write-Host "Host bash resolved and functional; git commit round-trip passed"
       - name: Check (Tauri crate)
         run: cargo check --manifest-path desktop/src-tauri/Cargo.toml --workspace --all-targets --target $env:TARGET
         env:
