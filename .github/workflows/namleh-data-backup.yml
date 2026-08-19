@@ -34,6 +34,13 @@ jobs:
 
       - name: Install PostgreSQL and R2 clients
         run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          codename="$(awk -F= '$1 == "VERSION_CODENAME" { print $2 }' /etc/os-release)"
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${codename}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-18 jq
           echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
