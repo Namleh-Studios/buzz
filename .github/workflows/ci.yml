@@ -16,7 +16,7 @@ env:
 jobs:
   changes:
     name: Detect Changed Paths
-    runs-on: [self-hosted, linux, home-lab]
+    runs-on: [self-hosted, linux, home-lab, docker]
     timeout-minutes: 2
     permissions:
       contents: read
@@ -32,9 +32,6 @@ jobs:
         with:
           fetch-depth: 2
       - uses: cashapp/activate-hermit@cea9af7913204a965fd488637a8d1811bba2e616 # v1
-      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
-        with:
-          ruby-version: '3.4'
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
@@ -100,7 +97,10 @@ jobs:
           scripts/test-github-origin-repo.sh
           node scripts/test-namleh-macos-identity.mjs
           deploy/charts/buzz-push-gateway/tests/release-contract.sh
-          ruby scripts/test-namleh-publish-guards.rb
+          tar -cf - scripts/test-namleh-publish-guards.rb .github/workflows \
+            | docker run --rm -i \
+                ruby:3.4.6-alpine3.22@sha256:d594d5debffa14c591c4fe03b9d0d79cdc28f30d594f47be748e642746057fec \
+                sh -c 'mkdir /workspace && tar -xf - -C /workspace && cd /workspace && ruby scripts/test-namleh-publish-guards.rb'
 
   rust-lint:
     name: Rust Lint
