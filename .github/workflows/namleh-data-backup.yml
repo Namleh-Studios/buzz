@@ -41,21 +41,36 @@ jobs:
           jq --version
 
       - name: Load credentials from Bitwarden Secrets Manager
-        uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21 # v2
-        with:
-          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
-          secrets: |
-            45f8101d-c5bf-42cb-88c9-b466002268bf > CLOUDFLARE_NAMLEH_ACCOUNT_ID
-            e5b23162-c574-450d-a27f-b4ab00e811bb > BUZZ_STAGING_BACKUP_DATABASE_URL
-            2363c745-3a33-4cb9-84cd-b4ab00dea4fe > BUZZ_STAGING_MIGRATION_DATABASE_URL
-            00923eb1-24cb-43d9-bfcf-b4ab00dee5aa > BUZZ_STAGING_BACKUP_R2_ACCESS_KEY_ID
-            bbc3e8a5-0645-4661-9073-b4ab00dee5e2 > BUZZ_STAGING_BACKUP_R2_SECRET_ACCESS_KEY
-            e07d147c-3f21-4897-a94d-b4ab00e815f9 > BUZZ_PRODUCTION_BACKUP_DATABASE_URL
-            d363568e-ae69-4ad6-b895-b4ab00dea8ec > BUZZ_PRODUCTION_MIGRATION_DATABASE_URL
-            e7e49440-d97d-49b4-8293-b4ab00dee860 > BUZZ_PRODUCTION_BACKUP_R2_ACCESS_KEY_ID
-            03dec605-7fe4-41c1-9b4b-b4ab00dee8a3 > BUZZ_PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY
-            f0208eef-2c71-4a2a-9d1b-b4ab00e1ca76 > BUZZ_RESTORE_VALIDATION_DATABASE_URL
-            b7f465a0-9da7-4ed1-bb0b-b4660021eb73 > NEON_API_KEY
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          secrets_json="$(
+            docker run --rm \
+              --env BWS_ACCESS_TOKEN \
+              ghcr.io/bitwarden/bws:2.1.0@sha256:3927158c53ac5a17d6cbe59fc3e1353e426f168bf246dbfe3668f6de5eaa107f \
+              secret list
+          )"
+          while read -r secret_id environment_name; do
+            value="$(jq -er --arg id "$secret_id" '
+              [.[] | select(.id == $id)]
+              | if length == 1 then .[0].value else error("secret lookup failed") end
+            ' <<< "$secrets_json")"
+            echo "::add-mask::$value"
+            printf '%s=%s\n' "$environment_name" "$value" >> "$GITHUB_ENV"
+          done <<'SECRETS'
+          45f8101d-c5bf-42cb-88c9-b466002268bf CLOUDFLARE_NAMLEH_ACCOUNT_ID
+          e5b23162-c574-450d-a27f-b4ab00e811bb BUZZ_STAGING_BACKUP_DATABASE_URL
+          2363c745-3a33-4cb9-84cd-b4ab00dea4fe BUZZ_STAGING_MIGRATION_DATABASE_URL
+          00923eb1-24cb-43d9-bfcf-b4ab00dee5aa BUZZ_STAGING_BACKUP_R2_ACCESS_KEY_ID
+          bbc3e8a5-0645-4661-9073-b4ab00dee5e2 BUZZ_STAGING_BACKUP_R2_SECRET_ACCESS_KEY
+          e07d147c-3f21-4897-a94d-b4ab00e815f9 BUZZ_PRODUCTION_BACKUP_DATABASE_URL
+          d363568e-ae69-4ad6-b895-b4ab00dea8ec BUZZ_PRODUCTION_MIGRATION_DATABASE_URL
+          e7e49440-d97d-49b4-8293-b4ab00dee860 BUZZ_PRODUCTION_BACKUP_R2_ACCESS_KEY_ID
+          03dec605-7fe4-41c1-9b4b-b4ab00dee8a3 BUZZ_PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY
+          f0208eef-2c71-4a2a-9d1b-b4ab00e1ca76 BUZZ_RESTORE_VALIDATION_DATABASE_URL
+          b7f465a0-9da7-4ed1-bb0b-b4660021eb73 NEON_API_KEY
+          SECRETS
+          unset secrets_json value
 
       - name: Back up and restore-check selected environments
         shell: bash
