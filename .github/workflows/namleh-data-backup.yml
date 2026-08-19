@@ -28,30 +28,17 @@ concurrency:
 jobs:
   backup-and-restore-validation:
     if: github.repository == 'Namleh-Studios/buzz'
-    runs-on: [self-hosted, linux, home-lab]
+    runs-on: [self-hosted, linux, home-lab, docker]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Install PostgreSQL and R2 clients
+      - name: Prepare PostgreSQL and R2 clients
         run: |
-          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
-          curl --fail --silent --show-error \
-            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
-          codename="$(awk -F= '$1 == "VERSION_CODENAME" { print $2 }' /etc/os-release)"
-          repository="https://apt.postgresql.org/pub/repos/apt"
-          suite="${codename}-pgdg"
-          if [[ "$codename" == "focal" ]]; then
-            repository="https://apt-archive.postgresql.org/pub/repos/apt"
-            suite="focal-pgdg-archive"
-          fi
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] ${repository} ${suite} main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client-18 jq
-          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
-          /usr/lib/postgresql/18/bin/pg_dump --version
-          aws --version
+          client_bin="$(scripts/setup-namleh-data-clients.sh)"
+          echo "$client_bin" >> "$GITHUB_PATH"
+          "$client_bin/pg_dump" --version
+          "$client_bin/aws" --version
+          jq --version
 
       - name: Load credentials from Bitwarden Secrets Manager
         uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21 # v2
@@ -72,6 +59,8 @@ jobs:
 
       - name: Back up and restore-check selected environments
         shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             selected_environment="${{ inputs.environment }}"
