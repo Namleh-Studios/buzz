@@ -56,6 +56,9 @@
       "additionalProperties": true,
       "properties": {
         "bindAddr": { "type": "string", "minLength": 1 },
+        "dbPoolSize": { "type": "integer", "minimum": 1 },
+        "dbConnectAttempts": { "type": "integer", "minimum": 1 },
+        "dbConnectBackoffMs": { "type": "integer", "minimum": 1 },
         "maxConnections": { "type": "integer", "minimum": 1 },
         "maxConcurrentHandlers": { "type": "integer", "minimum": 1 },
         "sendBuffer": { "type": "integer", "minimum": 1 },

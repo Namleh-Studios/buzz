@@ -57,6 +57,8 @@ pub struct Config {
     pub bind_addr: SocketAddr,
     /// Postgres database connection URL.
     pub database_url: String,
+    /// Optional elevated Postgres URL used only while applying migrations.
+    pub migration_database_url: Option<String>,
     /// Optional read-replica connection URL (e.g. an Aurora `cluster-ro-`
     /// endpoint). Unset means all reads stay on the writer.
     pub read_database_url: Option<String>,
@@ -99,6 +101,10 @@ pub struct Config {
     /// independently so reader capacity can be tuned against the replica's
     /// headroom without touching the writer pool.
     pub db_read_pool_size: Option<u32>,
+    /// Number of bounded attempts when waking or connecting to Postgres.
+    pub db_connect_attempts: u32,
+    /// Initial exponential-backoff delay between Postgres connection attempts.
+    pub db_connect_backoff_ms: u64,
     /// Public WebSocket URL of this relay, advertised in NIP-11.
     pub relay_url: String,
     /// Public WebSocket URL of the dedicated device-pairing relay, when configured.
@@ -466,6 +472,11 @@ impl Config {
         let database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://buzz:buzz_dev@localhost:5432/buzz".to_string()); // sadscan:disable np.postgres.1
 
+        let migration_database_url = std::env::var("BUZZ_MIGRATION_DATABASE_URL")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+
         let read_database_url = std::env::var("READ_DATABASE_URL")
             .ok()
             .map(|v| v.trim().to_string())
@@ -530,6 +541,18 @@ impl Config {
             .ok()
             .and_then(|v| v.parse::<u32>().ok())
             .filter(|&v| v > 0);
+
+        let db_connect_attempts = std::env::var("BUZZ_DB_CONNECT_ATTEMPTS")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(5);
+
+        let db_connect_backoff_ms = std::env::var("BUZZ_DB_CONNECT_BACKOFF_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|&v| v > 0)
+            .unwrap_or(500);
 
         let relay_url =
             std::env::var("RELAY_URL").unwrap_or_else(|_| "ws://localhost:3000".to_string());
@@ -989,6 +1012,7 @@ impl Config {
         Ok(Self {
             bind_addr,
             database_url,
+            migration_database_url,
             read_database_url,
             replica_read_max_age_ms,
             drain_jitter_ms,
@@ -996,6 +1020,8 @@ impl Config {
             redis_pool_size,
             db_pool_size,
             db_read_pool_size,
+            db_connect_attempts,
+            db_connect_backoff_ms,
             relay_url,
             pairing_relay_url,
             max_connections,
@@ -1113,9 +1139,12 @@ mod tests {
         let config = Config::from_env().expect("default config");
         assert!(config.bind_addr.port() > 0);
         assert!(!config.database_url.is_empty());
+        assert_eq!(config.migration_database_url, None);
         assert!(!config.redis_url.is_empty());
         assert_eq!(config.redis_pool_size, 16);
         assert_eq!(config.db_pool_size, 50);
+        assert_eq!(config.db_connect_attempts, 5);
+        assert_eq!(config.db_connect_backoff_ms, 500);
         assert!(config.max_connections > 0);
         assert!(config.send_buffer_size > 0);
         assert_eq!(config.max_frame_bytes, DEFAULT_MAX_FRAME_BYTES);
@@ -1319,6 +1348,68 @@ mod tests {
             set.as_deref(),
             Some("postgres://buzz:pw@replica:5432/buzz") // sadscan:disable np.postgres.1
         );
+    }
+
+    #[test]
+    fn migration_database_url_unset_or_blank_is_none() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let previous = std::env::var_os("BUZZ_MIGRATION_DATABASE_URL");
+
+        std::env::remove_var("BUZZ_MIGRATION_DATABASE_URL");
+        let unset = Config::from_env().expect("config").migration_database_url;
+
+        std::env::set_var("BUZZ_MIGRATION_DATABASE_URL", "   ");
+        let blank = Config::from_env().expect("config").migration_database_url;
+
+        std::env::set_var(
+            "BUZZ_MIGRATION_DATABASE_URL",
+            "postgres://buzz_migrator:pw@database:5432/buzz", // sadscan:disable np.postgres.1
+        );
+        let set = Config::from_env().expect("config").migration_database_url;
+
+        if let Some(value) = previous {
+            std::env::set_var("BUZZ_MIGRATION_DATABASE_URL", value);
+        } else {
+            std::env::remove_var("BUZZ_MIGRATION_DATABASE_URL");
+        }
+
+        assert_eq!(unset, None);
+        assert_eq!(blank, None);
+        assert_eq!(
+            set.as_deref(),
+            Some("postgres://buzz_migrator:pw@database:5432/buzz") // sadscan:disable np.postgres.1
+        );
+    }
+
+    #[test]
+    fn db_connect_retry_env_override_and_invalid_fallback() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let previous_attempts = std::env::var_os("BUZZ_DB_CONNECT_ATTEMPTS");
+        let previous_backoff = std::env::var_os("BUZZ_DB_CONNECT_BACKOFF_MS");
+
+        std::env::set_var("BUZZ_DB_CONNECT_ATTEMPTS", "5");
+        std::env::set_var("BUZZ_DB_CONNECT_BACKOFF_MS", "750");
+        let overridden = Config::from_env().expect("config");
+
+        std::env::set_var("BUZZ_DB_CONNECT_ATTEMPTS", "0");
+        std::env::set_var("BUZZ_DB_CONNECT_BACKOFF_MS", "invalid");
+        let fallback = Config::from_env().expect("config");
+
+        for (name, previous) in [
+            ("BUZZ_DB_CONNECT_ATTEMPTS", previous_attempts),
+            ("BUZZ_DB_CONNECT_BACKOFF_MS", previous_backoff),
+        ] {
+            if let Some(value) = previous {
+                std::env::set_var(name, value);
+            } else {
+                std::env::remove_var(name);
+            }
+        }
+
+        assert_eq!(overridden.db_connect_attempts, 5);
+        assert_eq!(overridden.db_connect_backoff_ms, 750);
+        assert_eq!(fallback.db_connect_attempts, 5);
+        assert_eq!(fallback.db_connect_backoff_ms, 500);
     }
 
     #[test]

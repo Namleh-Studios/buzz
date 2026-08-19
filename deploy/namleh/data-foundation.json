@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "environments": {
+    "staging": {
+      "neon": {
+        "projectId": "purple-art-22964496",
+        "branchId": "br-wispy-haze-af9l22s8",
+        "database": "buzz",
+        "applicationRole": "buzz_app",
+        "migrationRole": "buzz_migrator",
+        "backupRole": "buzz_backup",
+        "connectionMode": "direct",
+        "poolSize": 10,
+        "connectAttempts": 5,
+        "connectBackoffMs": 500,
+        "databaseUrlSecret": "BUZZ_STAGING_DATABASE_URL",
+        "migrationDatabaseUrlSecret": "BUZZ_STAGING_MIGRATION_DATABASE_URL",
+        "backupDatabaseUrlSecret": "BUZZ_STAGING_BACKUP_DATABASE_URL"
+      },
+      "r2": {
+        "objectsBucket": "namleh-buzz-staging-objects",
+        "backupsBucket": "namleh-buzz-staging-backups",
+        "browserCheckpointsBucket": "namleh-buzz-staging-browser-checkpoints",
+        "runtimeAccessKeySecret": "BUZZ_STAGING_RUNTIME_R2_ACCESS_KEY_ID",
+        "runtimeSecretKeySecret": "BUZZ_STAGING_RUNTIME_R2_SECRET_ACCESS_KEY",
+        "backupAccessKeySecret": "BUZZ_STAGING_BACKUP_R2_ACCESS_KEY_ID",
+        "backupSecretKeySecret": "BUZZ_STAGING_BACKUP_R2_SECRET_ACCESS_KEY"
+      }
+    },
+    "production": {
+      "neon": {
+        "projectId": "mute-block-23165481",
+        "branchId": "br-flat-cake-ax3hh3q5",
+        "database": "buzz",
+        "applicationRole": "buzz_app",
+        "migrationRole": "buzz_migrator",
+        "backupRole": "buzz_backup",
+        "connectionMode": "direct",
+        "poolSize": 10,
+        "connectAttempts": 5,
+        "connectBackoffMs": 500,
+        "databaseUrlSecret": "BUZZ_PRODUCTION_DATABASE_URL",
+        "migrationDatabaseUrlSecret": "BUZZ_PRODUCTION_MIGRATION_DATABASE_URL",
+        "backupDatabaseUrlSecret": "BUZZ_PRODUCTION_BACKUP_DATABASE_URL"
+      },
+      "r2": {
+        "objectsBucket": "namleh-buzz-production-objects",
+        "backupsBucket": "namleh-buzz-production-backups",
+        "browserCheckpointsBucket": "namleh-buzz-production-browser-checkpoints",
+        "runtimeAccessKeySecret": "BUZZ_PRODUCTION_RUNTIME_R2_ACCESS_KEY_ID",
+        "runtimeSecretKeySecret": "BUZZ_PRODUCTION_RUNTIME_R2_SECRET_ACCESS_KEY",
+        "backupAccessKeySecret": "BUZZ_PRODUCTION_BACKUP_R2_ACCESS_KEY_ID",
+        "backupSecretKeySecret": "BUZZ_PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY"
+      }
+    }
+  },
+  "backupPolicy": {
+    "dailyRetention": 30,
+    "monthlyRetention": 12,
+    "dailyPrefix": "daily/",
+    "monthlyPrefix": "monthly/"
+  },
+  "restoreValidation": {
+    "neonProjectId": "blue-block-54256769",
+    "neonBranchId": "br-red-union-ay3gtu8k",
+    "databaseUrlSecret": "BUZZ_RESTORE_VALIDATION_DATABASE_URL"
+  }
+}

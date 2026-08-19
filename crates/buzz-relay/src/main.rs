@@ -169,6 +169,8 @@ async fn main() -> anyhow::Result<()> {
         replica_read_max_age_ms: config.replica_read_max_age_ms,
         max_connections: config.db_pool_size,
         read_max_connections: config.db_read_pool_size,
+        connect_attempts: config.db_connect_attempts,
+        connect_backoff_ms: config.db_connect_backoff_ms,
         ..DbConfig::default()
     };
     let db = Db::new(&db_config).await.map_err(|e| {
@@ -188,7 +190,27 @@ async fn main() -> anyhow::Result<()> {
     let auto_migrate =
         buzz_auto_migrate_enabled(std::env::var("BUZZ_AUTO_MIGRATE").ok().as_deref());
     if auto_migrate {
-        db.migrate().await.map_err(|e| {
+        let migration_db = if let Some(database_url) = &config.migration_database_url {
+            Some(
+                Db::new(&DbConfig {
+                    database_url: database_url.clone(),
+                    max_connections: 1,
+                    min_connections: 0,
+                    connect_attempts: config.db_connect_attempts,
+                    connect_backoff_ms: config.db_connect_backoff_ms,
+                    ..DbConfig::default()
+                })
+                .await
+                .map_err(|e| {
+                    error!("Failed to connect to Postgres migration role: {e}");
+                    anyhow::anyhow!("Migration DB connection failed: {e}")
+                })?,
+            )
+        } else {
+            None
+        };
+        let migration_target = migration_db.as_ref().unwrap_or(&db);
+        migration_target.migrate().await.map_err(|e| {
             error!("Failed to run database migrations: {e}");
             anyhow::anyhow!("Database migration failed: {e}")
         })?;
