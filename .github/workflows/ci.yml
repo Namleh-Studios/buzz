@@ -1008,8 +1008,8 @@ jobs:
       # MSVC needs windows.h (aws-lc-sys et al.), so this runs on a real Windows
       # runner — hermit, used by the Linux jobs, does not provide MSVC.
       - name: Prefer Git for Windows bash
-        shell: pwsh
-        run: '"C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append'
+        shell: cmd
+        run: 'echo C:\Program Files\Git\bin>>%GITHUB_PATH%'
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
@@ -1023,7 +1023,7 @@ jobs:
       # Windows naming (binaries/<bin>-<triple>.exe); empty files suffice for a
       # type-check since nothing executes them.
       - name: Create sidecar placeholders
-        shell: pwsh
+        shell: powershell
         run: |
           $binaryDirectory = "desktop/src-tauri/binaries"
           New-Item -ItemType Directory -Force -Path $binaryDirectory | Out-Null
@@ -1046,7 +1046,7 @@ jobs:
       # The homelab runner has Git for Windows installed; the unit tests above
       # exercise the MCP resolver itself. This step verifies the host env.
       - name: Smoke-test host Git Bash prereq (host env check)
-        shell: pwsh
+        shell: powershell
         run: |
           $bashPath = "C:\Program Files\Git\bin\bash.exe"
           if (-not (Test-Path $bashPath)) {
