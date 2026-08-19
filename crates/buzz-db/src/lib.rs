@@ -520,6 +520,11 @@ pub struct DbConfig {
     pub max_lifetime_secs: u64,
     /// Seconds a connection may sit idle before being closed.
     pub idle_timeout_secs: u64,
+    /// Number of bounded attempts when opening the writer pool.
+    pub connect_attempts: u32,
+    /// Initial delay between writer connection attempts. Later attempts use
+    /// exponential backoff capped at eight times this value.
+    pub connect_backoff_ms: u64,
     /// Replica read budget `B` in milliseconds (bounded arm, env
     /// `BUZZ_REPLICA_READ_MAX_AGE_MS`). `0` disables bounded-staleness
     /// routing — the rollout default. Values above
@@ -543,6 +548,8 @@ impl Default for DbConfig {
             acquire_timeout_secs: 3,
             max_lifetime_secs: 1800,
             idle_timeout_secs: 600,
+            connect_attempts: 5,
+            connect_backoff_ms: 500,
             replica_read_max_age_ms: 0,
         }
     }
@@ -676,25 +683,46 @@ impl Db {
     /// migration 0021. Writer pools must arm it; replica pools are read-only
     /// so the trigger never fires there.
     async fn connect_pool(config: &DbConfig, url: &str, arm_floor_guard: bool) -> Result<PgPool> {
-        let mut options = PgPoolOptions::new()
-            .max_connections(config.max_connections)
-            .min_connections(config.min_connections)
-            .acquire_timeout(Duration::from_secs(config.acquire_timeout_secs))
-            .max_lifetime(Duration::from_secs(config.max_lifetime_secs))
-            .idle_timeout(Duration::from_secs(config.idle_timeout_secs));
-        if arm_floor_guard {
-            options = options.after_connect(|conn, _meta| {
-                Box::pin(async move {
-                    // `SET` cannot take bind parameters; `set_config` can.
-                    sqlx::query("SELECT set_config('buzz.created_at_floor', $1, false)")
-                        .bind(replica_fence::CREATED_AT_FLOOR_SECS.to_string())
-                        .execute(conn)
-                        .await?;
-                    Ok(())
-                })
-            });
+        let attempts = config.connect_attempts.max(1);
+        let mut attempt = 1;
+        loop {
+            let mut options = PgPoolOptions::new()
+                .max_connections(config.max_connections)
+                .min_connections(config.min_connections)
+                .acquire_timeout(Duration::from_secs(config.acquire_timeout_secs))
+                .max_lifetime(Duration::from_secs(config.max_lifetime_secs))
+                .idle_timeout(Duration::from_secs(config.idle_timeout_secs));
+            if arm_floor_guard {
+                options = options.after_connect(|conn, _meta| {
+                    Box::pin(async move {
+                        // `SET` cannot take bind parameters; `set_config` can.
+                        sqlx::query("SELECT set_config('buzz.created_at_floor', $1, false)")
+                            .bind(replica_fence::CREATED_AT_FLOOR_SECS.to_string())
+                            .execute(conn)
+                            .await?;
+                        Ok(())
+                    })
+                });
+            }
+
+            match options.connect(url).await {
+                Ok(pool) => return Ok(pool),
+                Err(error) if attempt < attempts => {
+                    let multiplier = 1_u64 << (attempt - 1).min(3);
+                    let delay_ms = config.connect_backoff_ms.saturating_mul(multiplier);
+                    tracing::warn!(
+                        attempt,
+                        attempts,
+                        delay_ms,
+                        error = %error,
+                        "Postgres connection failed; retrying after bounded backoff"
+                    );
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    attempt += 1;
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
-        Ok(options.connect(url).await?)
     }
 
     /// Reader acquire timeout — deliberately far below the writer's

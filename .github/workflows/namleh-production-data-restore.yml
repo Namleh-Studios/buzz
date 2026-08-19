@@ -1,0 +1,60 @@
+name: Namleh production data restore
+
+on:
+  workflow_dispatch:
+    inputs:
+      cadence:
+        description: Backup cadence containing the selected object
+        required: true
+        type: choice
+        options: [daily, monthly]
+      backup_key:
+        description: Exact R2 database.dump object key
+        required: true
+        type: string
+      confirmation:
+        description: Type RESTORE PRODUCTION DATA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: namleh-production-data-restore
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: >-
+      github.repository == 'Namleh-Studios/buzz' &&
+      inputs.confirmation == 'RESTORE PRODUCTION DATA'
+    environment: production
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install PostgreSQL and R2 clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client awscli jq
+
+      - name: Load credentials from Bitwarden Secrets Manager
+        uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21 # v2
+        with:
+          access_token: ${{ secrets.BWS_ACCESS_TOKEN }}
+          secrets: |
+            45f8101d-c5bf-42cb-88c9-b466002268bf > CLOUDFLARE_NAMLEH_ACCOUNT_ID
+            d363568e-ae69-4ad6-b895-b4ab00dea8ec > BUZZ_PRODUCTION_MIGRATION_DATABASE_URL
+            e7e49440-d97d-49b4-8293-b4ab00dee860 > BUZZ_PRODUCTION_BACKUP_R2_ACCESS_KEY_ID
+            03dec605-7fe4-41c1-9b4b-b4ab00dee8a3 > BUZZ_PRODUCTION_BACKUP_R2_SECRET_ACCESS_KEY
+
+      - name: Restore selected production backup
+        env:
+          NAMLEH_PRODUCTION_RESTORE_CONFIRMATION: ${{ inputs.confirmation }}
+          PRODUCTION_RESTORE_BACKUP_KEY: ${{ inputs.backup_key }}
+        run: >-
+          scripts/namleh-data-restore-validate.sh
+          production
+          "${{ inputs.cadence }}"
+          production
