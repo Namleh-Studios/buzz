@@ -16,7 +16,7 @@ for client in pg_dump pg_restore psql; do
     '  --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \' \
     '  --volume "${RUNNER_TEMP}:${RUNNER_TEMP}" \' \
     '  --workdir "$PWD" \' \
-    '  postgres:18 "$(basename "$0")" "$@"' \
+    '  postgres:18.6 "$(basename "$0")" "$@"' \
     >"${client_bin}/${client}"
   chmod 0755 "${client_bin}/${client}"
 done
@@ -32,7 +32,7 @@ printf '%s\n' \
   '  --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \' \
   '  --volume "${RUNNER_TEMP}:${RUNNER_TEMP}" \' \
   '  --workdir "$PWD" \' \
-  '  amazon/aws-cli:2 "$@"' \
+  '  amazon/aws-cli:2.36.20 "$@"' \
   >"${client_bin}/aws"
 chmod 0755 "${client_bin}/aws"
 
