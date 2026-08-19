@@ -1013,6 +1013,7 @@ jobs:
       - name: Prefer Git for Windows bash
         shell: cmd
         run: 'echo C:\Program Files\Git\bin>>%GITHUB_PATH%'
+      - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           components: clippy
