@@ -37,7 +37,10 @@ jobs:
       - name: Install PostgreSQL and R2 clients
         run: |
           sudo apt-get update
-          sudo apt-get install --yes postgresql-client awscli jq
+          sudo apt-get install --yes postgresql-client-18 jq
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_restore --version
+          aws --version
 
       - name: Load credentials from Bitwarden Secrets Manager
         uses: bitwarden/sm-action@f1de238fc00c738c56140796018be9084c2b5d21 # v2
